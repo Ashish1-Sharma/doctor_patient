@@ -45,13 +45,19 @@ class PatientModel {
   });
 
   factory PatientModel.fromJson(Map<String, dynamic> json) {
+    int parseId(dynamic val) {
+      if (val == null) return 0;
+      if (val is int) return val;
+      return int.tryParse(val.toString()) ?? 0;
+    }
+
     return PatientModel(
-      id: json['id'] as int? ?? 0,
-      parentId: json['parentId'] as int? ?? json['parent_id'] as int? ?? 0,
+      id: parseId(json['id']),
+      parentId: parseId(json['parentId'] ?? json['parent_id']),
       patientCode: json['patientCode'] as String? ?? json['patient_code'] as String? ?? '',
       profileImage: json['profileImage'] as String? ?? json['profile_image'] as String? ?? '',
       fullName: json['fullName'] as String? ?? json['full_name'] as String? ?? '',
-      age: json['age'] as int? ?? 0,
+      age: parseId(json['age']),
       gender: json['gender'] as String? ?? '',
       dateOfBirth: json['dateOfBirth'] as String? ?? json['date_of_birth'] as String? ?? '',
       phone: json['phone'] as String? ?? '',
@@ -66,12 +72,14 @@ class PatientModel {
           const [],
       emergencyContactName: json['emergencyContactName'] as String? ?? json['emergency_contact_name'] as String? ?? '',
       emergencyContactPhone: json['emergencyContactPhone'] as String? ?? json['emergency_contact_phone'] as String? ?? '',
-      totalVisits: json['totalVisits'] as int? ?? json['total_visits'] as int? ?? 0,
+      totalVisits: parseId(json['totalVisits'] ?? json['total_visits']),
       lastVisitDate: json['lastVisitDate'] as String? ?? json['last_visit_date'] as String? ?? '',
-      createdBy: json['createdBy'] as int? ?? json['created_by'] as int? ?? 0,
+      createdBy: parseId(json['createdBy'] ?? json['created_by']),
       status: json['status'] is int
           ? (json['status'] as int) == 1
-          : json['status'] as bool? ?? false,
+          : (json['status'] is String
+              ? (int.tryParse(json['status'].toString()) == 1)
+              : json['status'] as bool? ?? false),
       createdAt: json['createdAt'] as String? ?? json['created_at'] as String? ?? '',
       updatedAt: json['updatedAt'] as String? ?? json['updated_at'] as String? ?? '',
     );

@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import '../models/visit_model.dart';
 import '../models/payment_model.dart';
+import '../models/appointment_model.dart';
 
 /// VisitProvider holds the active VisitModel and PaymentModel state
 /// for the New Treatment workflow.
 class VisitProvider extends ChangeNotifier {
   late VisitModel _visit;
   late PaymentModel _payment;
+  AppointmentModel? _pendingAppointment;
 
   VisitModel get visit => _visit;
   PaymentModel get payment => _payment;
+  AppointmentModel? get pendingAppointment => _pendingAppointment;
 
   VisitProvider() {
     reset();
@@ -25,7 +28,7 @@ class VisitProvider extends ChangeNotifier {
       parentId: parentId,
       patientId: 0,
       doctorId: doctorId,
-      visitNo: 'VIS-0001',
+      visitNo: '001',
       visitDate: nowStr,
       chiefComplaintText: '',
       chiefComplaintImages: const [],
@@ -65,16 +68,37 @@ class VisitProvider extends ChangeNotifier {
       createdAt: nowStr,
       updatedAt: nowStr,
     );
+    _pendingAppointment = null;
+    notifyListeners();
+  }
+
+  /// Set the pending appointment to be processed on checkout finalization
+  void setPendingAppointment(AppointmentModel? appt) {
+    _pendingAppointment = appt;
+    notifyListeners();
+  }
+
+  /// Populate the provider with an existing visit and payment for editing.
+  void populateForEdit(VisitModel visit, PaymentModel payment) {
+    _visit = visit;
+    _payment = payment;
+    _pendingAppointment = null;
     notifyListeners();
   }
 
   /// Step 1: Update patient details in the visit and payment.
   void updatePatient({required int patientId, required dynamic visitNo}) {
-    String formattedVisitNo = 'VIS-0001';
+    String formattedVisitNo = '001';
     if (visitNo is int) {
-      formattedVisitNo = 'VIS-${visitNo.toString().padLeft(4, '0')}';
+      formattedVisitNo = visitNo.toString().padLeft(3, '0');
     } else if (visitNo != null) {
-      formattedVisitNo = visitNo.toString();
+      final valStr = visitNo.toString();
+      final numericPart = RegExp(r'\d+').firstMatch(valStr);
+      if (numericPart != null) {
+        formattedVisitNo = int.parse(numericPart.group(0)!).toString().padLeft(3, '0');
+      } else {
+        formattedVisitNo = valStr;
+      }
     }
 
     _visit = _visit.copyWith(

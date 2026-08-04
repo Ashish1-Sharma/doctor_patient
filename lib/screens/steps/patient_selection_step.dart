@@ -5,8 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/patient_model.dart';
 import '../../providers/visit_provider.dart';
 import '../../services/patient_service.dart';
+import '../../services/visit_service.dart';
 import '../../theme/app_theme.dart';
 import '../add_patient_screen.dart';
+import '../new_treatment_screen.dart';
 
 /// STEP 1: Select Patient step inside the New Treatment workflow.
 class PatientSelectionStep extends StatefulWidget {
@@ -19,43 +21,42 @@ class PatientSelectionStep extends StatefulWidget {
 class _PatientSelectionStepState extends State<PatientSelectionStep> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
-  late List<PatientModel> _patients;
-
-  bool _isLoading = false;
+  List<PatientModel> _patients = [];
+  bool _isLoading = true;
+  int _doctorId = 1;
   int _parentId = 1;
 
   @override
   void initState() {
     super.initState();
-    _patients = [];
-    _loadDoctorIdAndFetch(autoSelectFirst: false);
+    _loadDoctorAndPatients();
   }
 
-  Future<void> _loadDoctorIdAndFetch({bool autoSelectFirst = false}) async {
-    setState(() {
-      _isLoading = true;
-    });
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
+  Future<void> _loadDoctorAndPatients() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final profileStr = prefs.getString('user_profile');
       if (profileStr != null) {
         final profile = jsonDecode(profileStr);
         final rawId = profile['id'];
-        final loggedInUserId = rawId is int ? rawId : (rawId != null ? int.tryParse(rawId.toString()) : null);
+        _doctorId = rawId is int ? rawId : (rawId != null ? (int.tryParse(rawId.toString()) ?? 1) : 1);
         final isSubUser = profile['isSubUser'] == true;
-        
-        final rawParentId = isSubUser 
-            ? (profile['parentId'] ?? profile['mainAccountId'] ?? loggedInUserId)
-            : loggedInUserId;
-        final parentId = rawParentId is int ? rawParentId : (rawParentId != null ? int.tryParse(rawParentId.toString()) : null);
-
-        if (parentId != null) {
-          _parentId = parentId;
-        }
+        _parentId = isSubUser
+            ? (profile['parentId'] ?? profile['mainAccountId'] ?? _doctorId)
+            : _doctorId;
       }
     } catch (_) {}
 
+    await _fetchPatients();
+  }
+
+  Future<void> _fetchPatients() async {
     try {
       final response = await PatientService.getPatients(_parentId)
           .timeout(const Duration(seconds: 5));
@@ -64,36 +65,16 @@ class _PatientSelectionStepState extends State<PatientSelectionStep> {
         if (responseData['statusCode'] == 200 && responseData['body'] is List) {
           final list = responseData['body'] as List;
           final fetched = list.map((json) => PatientModel.fromJson(json)).toList();
-          if (mounted) {
-            setState(() {
-              _patients = fetched;
-              _isLoading = false;
-            });
-            if (autoSelectFirst && fetched.isNotEmpty) {
-              final latest = fetched.first;
-              final provider = Provider.of<VisitProvider>(context, listen: false);
-              provider.updatePatient(
-                patientId: latest.id,
-                visitNo: latest.totalVisits + 1,
-              );
-            }
-            return;
-          }
+          setState(() {
+            _patients = fetched;
+          });
         }
       }
     } catch (_) {}
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   Future<void> _createNewPatient(BuildContext context) async {
@@ -105,7 +86,10 @@ class _PatientSelectionStepState extends State<PatientSelectionStep> {
     );
 
     if (didCreate == true) {
-      _loadDoctorIdAndFetch(autoSelectFirst: true);
+      setState(() {
+        _isLoading = true;
+      });
+      await _fetchPatients();
     }
   }
 
@@ -114,6 +98,7 @@ class _PatientSelectionStepState extends State<PatientSelectionStep> {
     final provider = Provider.of<VisitProvider>(context);
     final selectedPatientId = provider.visit.patientId;
     final textTheme = Theme.of(context).textTheme;
+    final editMode = context.findAncestorWidgetOfExactType<NewTreatmentScreen>()?.visitToEdit != null;
 
     // Filter patients based on query matching Name, Mobile, or Code
     final filtered = _patients.where((p) {
@@ -135,11 +120,40 @@ class _PatientSelectionStepState extends State<PatientSelectionStep> {
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
-          'Search for an existing patient or add a new profile to continue.',
-          style: TextStyle(color: AppTheme.secondarySlate, fontSize: 13),
+        Text(
+          editMode
+              ? 'Patient details are locked for editing this visit record.'
+              : 'Search for an existing patient or add a new profile to continue.',
+          style: const TextStyle(color: AppTheme.secondarySlate, fontSize: 13),
         ),
         const SizedBox(height: 20),
+
+        if (editMode)
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.amberWarning.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.amberWarning.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.lock_outline, color: AppTheme.amberWarning, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Editing Visit #${provider.visit.visitNo} - Selected patient is locked.',
+                    style: const TextStyle(
+                      color: AppTheme.amberWarning,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
 
         // Search Bar Row
         Row(
@@ -163,20 +177,22 @@ class _PatientSelectionStepState extends State<PatientSelectionStep> {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            // Quick Add Button
-            InkWell(
-              onTap: () => _createNewPatient(context),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppTheme.tealAccent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+            if (!editMode) ...[
+              const SizedBox(width: 12),
+              // Quick Add Button
+              InkWell(
+                onTap: () => _createNewPatient(context),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.tealAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.person_add_alt_1_outlined, color: AppTheme.tealAccent, size: 22),
                 ),
-                child: const Icon(Icons.person_add_alt_1_outlined, color: AppTheme.tealAccent, size: 22),
               ),
-            ),
+            ],
           ],
         ),
 
@@ -199,18 +215,20 @@ class _PatientSelectionStepState extends State<PatientSelectionStep> {
                         'No patients found',
                         style: TextStyle(color: AppTheme.secondarySlate, fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: () => _createNewPatient(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.tealAccent,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      if (!editMode) ...[
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () => _createNewPatient(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.tealAccent,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add New Patient'),
                         ),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add New Patient'),
-                      ),
+                      ],
                     ],
                   ),
                 )
@@ -235,13 +253,38 @@ class _PatientSelectionStepState extends State<PatientSelectionStep> {
                             : AppTheme.premiumShadow,
                       ),
                       child: InkWell(
-                        onTap: () {
+                        onTap: () async {
+                          if (editMode) {
+                            ScaffoldMessenger.of(context).clearSnackBars();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Patient cannot be changed when editing a visit.'),
+                                backgroundColor: AppTheme.amberWarning,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            return;
+                          }
+
+                          // Dynamically fetch total visits count from database
+                          int databaseVisitCount = 0;
+                          try {
+                            final response = await VisitService.getVisits(_parentId, patient.id).timeout(const Duration(seconds: 4));
+                            if (response.statusCode == 200) {
+                              final Map<String, dynamic> responseData = jsonDecode(response.body);
+                              if (responseData['statusCode'] == 200 && responseData['body'] is List) {
+                                final list = responseData['body'] as List;
+                                databaseVisitCount = list.length;
+                              }
+                            }
+                          } catch (_) {}
+
                           provider.updatePatient(
                             patientId: patient.id,
-                            visitNo: patient.totalVisits + 1,
+                            visitNo: databaseVisitCount + 1,
                           );
                         },
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: const BorderRadius.all(Radius.circular(16)),
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
                           child: Row(

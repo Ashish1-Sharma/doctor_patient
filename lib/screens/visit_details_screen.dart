@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/visit_model.dart';
+import '../models/appointment_model.dart';
 import '../services/visit_service.dart';
+import '../services/appointment_service.dart';
 import '../theme/app_theme.dart';
 
 /// A premium full-screen display for Clinical Visit Details.
@@ -22,23 +24,32 @@ class VisitDetailsScreen extends StatefulWidget {
 
 class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
   late Future<http.Response> _visitFuture;
+  AppointmentModel? _linkedAppointment;
 
   @override
   void initState() {
     super.initState();
     _visitFuture = VisitService.getVisitById(widget.doctorId, widget.visitId);
+    _loadLinkedAppointment();
   }
 
-  Color _getStatusColor(String status) {
-    final s = status.trim().toLowerCase();
-    if (s == '1' || s == 'active') {
-      return AppTheme.emeraldSuccess;
-    } else if (s == 'pending') {
-      return AppTheme.amberWarning;
-    } else {
-      return AppTheme.secondarySlate;
-    }
+  Future<void> _loadLinkedAppointment() async {
+    try {
+      final response = await AppointmentService.getAppointments(widget.doctorId).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        if (responseData['statusCode'] == 200 && responseData['body'] is List) {
+          final list = responseData['body'] as List;
+          final appts = list.map((json) => AppointmentModel.fromJson(json)).toList();
+          final match = appts.firstWhere((a) => a.visitId == widget.visitId);
+          setState(() {
+            _linkedAppointment = match;
+          });
+        }
+      }
+    } catch (_) {}
   }
+
 
   void _showFullScreenImage(String imageUrl) {
     showDialog(
@@ -242,10 +253,9 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
             }
 
             final details = VisitModel.fromJson(responseData['body']);
-            final statusColor = _getStatusColor(details.status);
-            final formattedVisitNo = details.visitNo.startsWith('VIS-') 
-                ? details.visitNo 
-                : 'VIS-${details.visitNo.padLeft(4, '0')}';
+            final formattedVisitNo = details.visitNo.replaceAll(RegExp(r'[^\d]'), '').isEmpty
+                ? details.visitNo
+                : int.parse(details.visitNo.replaceAll(RegExp(r'[^\d]'), '')).toString().padLeft(3, '0');
 
             return SingleChildScrollView(
               padding: const EdgeInsets.all(20.0),
@@ -267,34 +277,12 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              formattedVisitNo,
-                              style: textTheme.headlineMedium?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: statusColor.withValues(alpha: 0.2),
-                                border: Border.all(color: statusColor, width: 1.5),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                details.status.toUpperCase(),
-                                style: TextStyle(
-                                  color: statusColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ),
-                          ],
+                        Text(
+                          formattedVisitNo,
+                          style: textTheme.headlineMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -359,6 +347,12 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                     title: 'Doctor Notes & Remarks',
                     content: details.notes,
                   ),
+                  if (_linkedAppointment != null)
+                    _buildSectionCard(
+                      icon: Icons.calendar_month,
+                      title: 'Linked Appointment Details',
+                      content: 'Date & Time: ${_linkedAppointment!.appointmentDate}\nProcedure: ${_linkedAppointment!.procedureText}\nStatus: ${_linkedAppointment!.status}',
+                    ),
                 ],
               ),
             );

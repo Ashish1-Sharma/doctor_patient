@@ -39,24 +39,36 @@ class PaymentModel {
   });
 
   factory PaymentModel.fromJson(Map<String, dynamic> json) {
+    int parseId(dynamic val) {
+      if (val == null) return 0;
+      if (val is int) return val;
+      return int.tryParse(val.toString()) ?? 0;
+    }
+
+    double parseDouble(dynamic val) {
+      if (val == null) return 0.0;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? 0.0;
+    }
+
     return PaymentModel(
-      id: json['id'] as int? ?? 0,
-      parentId: json['parentId'] as int? ?? 0,
-      visitId: json['visitId'] as int? ?? 0,
-      patientId: json['patientId'] as int? ?? 0,
-      invoiceNo: json['invoiceNo'] as String? ?? '',
-      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0.0,
-      discount: (json['discount'] as num?)?.toDouble() ?? 0.0,
-      totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
-      paidAmount: (json['paidAmount'] as num?)?.toDouble() ?? 0.0,
-      pendingAmount: (json['pendingAmount'] as num?)?.toDouble() ?? 0.0,
-      paymentMethod: json['paymentMethod'] as String? ?? '',
-      paymentStatus: json['paymentStatus'] as String? ?? '',
-      paymentDate: json['paymentDate'] as String? ?? '',
+      id: parseId(json['id']),
+      parentId: parseId(json['parentId'] ?? json['parent_id']),
+      visitId: parseId(json['visit_id'] ?? json['visitId']),
+      patientId: parseId(json['patient_id'] ?? json['patientId']),
+      invoiceNo: json['invoice_no'] as String? ?? json['invoiceNo'] as String? ?? '',
+      subtotal: parseDouble(json['subtotal']),
+      discount: parseDouble(json['discount']),
+      totalAmount: parseDouble(json['total_amount'] ?? json['totalAmount']),
+      paidAmount: parseDouble(json['paid_amount'] ?? json['paidAmount']),
+      pendingAmount: parseDouble(json['pending_amount'] ?? json['pendingAmount']),
+      paymentMethod: json['payment_method'] as String? ?? json['paymentMethod'] as String? ?? '',
+      paymentStatus: json['payment_status'] as String? ?? json['paymentStatus'] as String? ?? '',
+      paymentDate: json['payment_date'] as String? ?? json['paymentDate'] as String? ?? '',
       remarks: json['remarks'] as String? ?? '',
-      createdBy: json['createdBy'] as int? ?? 0,
-      createdAt: json['createdAt'] as String? ?? '',
-      updatedAt: json['updatedAt'] as String? ?? '',
+      createdBy: parseId(json['created_by'] ?? json['createdBy']),
+      createdAt: json['created_at'] as String? ?? json['createdAt'] as String? ?? '',
+      updatedAt: json['updated_at'] as String? ?? json['updatedAt'] as String? ?? '',
     );
   }
 

@@ -19,10 +19,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   
-  final _emailMobileController = TextEditingController(text: 'clinic@gmail.com');
-  final _clinicEmailController = TextEditingController(text: 'clinic@gmail.com');
-  final _doctorEmailController = TextEditingController(text: 'doctor@gmail.com');
-  final _passwordController = TextEditingController(text: '123456');
+  final _emailMobileController = TextEditingController();
+  final _clinicEmailController = TextEditingController();
+  final _doctorEmailController = TextEditingController();
+  final _passwordController = TextEditingController();
   
   bool _isLoginAsSubUser = false; // false = Clinic Owner, true = Doctor / Staff
   bool _isObscure = true;
@@ -82,10 +82,10 @@ class _LoginScreenState extends State<LoginScreen> {
           "userEmailMobile": _emailMobileController.text.trim(),
           "password": _passwordController.text.trim(),
         };
-        response = await AuthService.loginDoctor(requestPayload)
-            .timeout(const Duration(seconds: 5));
+        response = await AuthService.loginDoctor(requestPayload).timeout(const Duration(seconds: 5));
       }
 
+      print(jsonDecode(response.body));
       final Map<String, dynamic> responseData = jsonDecode(response.body);
 
       setState(() {
@@ -95,7 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final statusCode = response.statusCode;
       final apiStatusCode = responseData['statusCode'] as int?;
 
-      if (statusCode == 200 || apiStatusCode == 200) {
+      if (statusCode == 200 && apiStatusCode == 200) {
         // Save logged in status to persist session
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('is_logged_in', true);

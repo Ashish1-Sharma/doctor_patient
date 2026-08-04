@@ -31,12 +31,8 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
   late TextEditingController _emergencyPhoneController;
 
   final List<String> _availableConditions = [
-    'Diabetes',
-    'Hypertension',
-    'Thyroid',
-    'Heart Disease',
-    'Allergy',
-    'Asthma',
+    'Git','Heart','Diabetes','Hypertension','Allergy','Respiratory','Thyroid','Liver','Kidney',
+    'Pregnancy','Any Surgery','Hepatitis, HIV','Bleeding Disorders','Seizures/Fainting'
   ];
 
   final Map<String, bool> _selectedConditions = {};

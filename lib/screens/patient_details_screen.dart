@@ -1,14 +1,19 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
+
+import 'package:provider/provider.dart';
 import '../models/patient_model.dart';
 import '../models/visit_model.dart';
+import '../models/payment_model.dart';
+import '../providers/visit_provider.dart';
 import '../services/visit_service.dart';
 import '../services/patient_service.dart';
+import '../services/payment_service.dart';
 import '../theme/app_theme.dart';
 import 'add_patient_screen.dart';
 import 'visit_details_screen.dart';
+import 'new_treatment_screen.dart';
 
 class PatientDetailsScreen extends StatefulWidget {
   final PatientModel patient;
@@ -57,7 +62,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
 
     try {
       final response = await VisitService.getVisits(_doctorId, _currentPatient.id)
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 8));
       final Map<String, dynamic> responseData = jsonDecode(response.body);
 
       if (response.statusCode == 200 && responseData['statusCode'] == 200) {
@@ -65,6 +70,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
           final list = responseData['body'] as List;
           final apiVisits = list.map((json) => VisitModel.fromJson(json)).toList();
           apiVisits.sort((a, b) => b.visitDate.compareTo(a.visitDate));
+
           setState(() {
             _visits = apiVisits;
           });
@@ -119,211 +125,161 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
     }
   }
 
-  Future<void> _toggleVisitStatus(VisitModel visit) async {
-    final currentStatusVal = int.tryParse(visit.status) ?? 1;
-    final nextStatusVal = currentStatusVal == 1 ? 0 : 1;
 
+  Future<void> _showEditVisitDialog(VisitModel visit) async {
+    // 1. Fetch visit details from backend (so we have findings, etc.)
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: AppTheme.tealAccent),
+      ),
+    );
+
+    VisitModel? fullVisit;
     try {
-      final response = await VisitService.changeVisitStatus(visit.id, _doctorId, nextStatusVal)
-          .timeout(const Duration(seconds: 5));
-      if (response.statusCode == 200) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Visit status updated successfully to ${nextStatusVal == 1 ? "Active" : "Inactive"}.'),
-              backgroundColor: AppTheme.emeraldSuccess,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-        _fetchVisits();
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to update status on server.'),
-              backgroundColor: AppTheme.redDestructive,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+      final res = await VisitService.getVisitById(_doctorId, visit.id);
+      if (res.statusCode == 200) {
+        final Map<String, dynamic> responseData = jsonDecode(res.body);
+        if (responseData['statusCode'] == 200) {
+          fullVisit = VisitModel.fromJson(responseData['body']);
         }
       }
-    } catch (_) {
+    } catch (_) {}
+
+    // Pop the loading spinner dialog
+    if (mounted) Navigator.pop(context);
+
+    if (fullVisit == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Failed to update status. Check backend connection.'),
+            content: Text('Error loading visit details for edit.'),
             backgroundColor: AppTheme.redDestructive,
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
+      return;
     }
-  }
 
-  void _showEditVisitDialog(VisitModel visit) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return FutureBuilder<http.Response>(
-          future: VisitService.getVisitById(_doctorId, visit.id),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const AlertDialog(
-                content: SizedBox(
-                  height: 100,
-                  child: Center(
-                    child: CircularProgressIndicator(color: AppTheme.tealAccent),
-                  ),
-                ),
-              );
-            }
+    // 2. Fetch linked payment from database API
+    PaymentModel? linkedPayment;
+    try {
+      final response = await PaymentService.getPayments(_doctorId).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        if (responseData['statusCode'] == 200 && responseData['body'] is List) {
+          final list = responseData['body'] as List;
+          final fetchedPayments = list.map((json) => PaymentModel.fromJson(json)).toList();
+          linkedPayment = fetchedPayments.firstWhere((p) => p.visitId == visit.id);
+        }
+      }
+    } catch (_) {}
 
-            if (snapshot.hasError || snapshot.data == null) {
-              return const AlertDialog(
-                content: Text('Error loading visit details for edit.'),
-              );
-            }
+    if (linkedPayment == null) {
+      // Create a default payment if not found
+      linkedPayment = PaymentModel(
+        id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        parentId: _doctorId,
+        visitId: visit.id,
+        patientId: visit.patientId,
+        invoiceNo: 'INV-${visit.id.toString().substring(3)}',
+        subtotal: 0.0,
+        discount: 0.0,
+        totalAmount: 0.0,
+        paidAmount: 0.0,
+        pendingAmount: 0.0,
+        paymentMethod: 'UPI',
+        paymentStatus: 'Pending',
+        paymentDate: visit.visitDate,
+        remarks: '',
+        createdBy: _doctorId,
+        createdAt: visit.createdAt,
+        updatedAt: visit.updatedAt,
+      );
+    }
 
-            try {
-              final Map<String, dynamic> responseData = jsonDecode(snapshot.data!.body);
-              final details = VisitModel.fromJson(responseData['body']);
-
-              final complaintCtrl = TextEditingController(text: details.chiefComplaintText);
-              final findingsCtrl = TextEditingController(text: details.clinicalFindingsText);
-              final labCtrl = TextEditingController(text: details.labText);
-              final advisedCtrl = TextEditingController(text: details.advisedTreatmentText);
-              final doneCtrl = TextEditingController(text: details.treatmentDoneText);
-              final medicationCtrl = TextEditingController(text: details.medicationText);
-              final nextDateCtrl = TextEditingController(text: details.nextAppointmentDate);
-              final notesCtrl = TextEditingController(text: details.notes);
-
-              return AlertDialog(
-                title: Text('Edit Visit: ${details.visitNo.startsWith('VIS-') ? details.visitNo : 'VIS-${details.visitNo.padLeft(4, '0')}'}'),
-                content: SizedBox(
-                  width: double.maxFinite,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextField(
-                          controller: complaintCtrl,
-                          decoration: const InputDecoration(labelText: 'Chief Complaint'),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: findingsCtrl,
-                          decoration: const InputDecoration(labelText: 'Clinical Findings'),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: labCtrl,
-                          decoration: const InputDecoration(labelText: 'Lab Details'),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: advisedCtrl,
-                          decoration: const InputDecoration(labelText: 'Advised Treatment'),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: doneCtrl,
-                          decoration: const InputDecoration(labelText: 'Treatment Done'),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: medicationCtrl,
-                          decoration: const InputDecoration(labelText: 'Medication Text'),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: nextDateCtrl,
-                          decoration: const InputDecoration(labelText: 'Next Appointment (YYYY-MM-DD)'),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: notesCtrl,
-                          decoration: const InputDecoration(labelText: 'Notes / Remarks'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      final Map<String, dynamic> updatePayload = {
-                        "id": details.id,
-                        "parentId": _doctorId,
-                        "chiefComplaintText": complaintCtrl.text.trim(),
-                        "chiefComplaintImages": details.chiefComplaintImages,
-                        "clinicalFindingsText": findingsCtrl.text.trim(),
-                        "clinicalFindingsImages": details.clinicalFindingsImages,
-                        "labText": labCtrl.text.trim(),
-                        "labImages": details.labImages,
-                        "advisedTreatmentText": advisedCtrl.text.trim(),
-                        "advisedTreatmentImages": details.advisedTreatmentImages,
-                        "treatmentDoneText": doneCtrl.text.trim(),
-                        "treatmentDoneImages": details.treatmentDoneImages,
-                        "medicationText": medicationCtrl.text.trim(),
-                        "medicationImages": details.medicationImages,
-                        "nextAppointmentDate": nextDateCtrl.text.trim().isEmpty ? null : nextDateCtrl.text.trim(),
-                        "notes": notesCtrl.text.trim(),
-                        "status": int.tryParse(details.status) ?? 1
-                      };
-
-                      try {
-                        final res = await VisitService.updateVisit(updatePayload);
-                        if (res.statusCode == 200 && context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Visit details updated successfully!'),
-                              backgroundColor: AppTheme.emeraldSuccess,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                          Navigator.pop(context); // Close dialog
-                          _fetchVisits(); // Refresh list
-                        } else {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Failed to update details on server.'),
-                                backgroundColor: AppTheme.redDestructive,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        }
-                      } catch (_) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Failed to update. Check network connection.'),
-                              backgroundColor: AppTheme.redDestructive,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    child: const Text('Save Details', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              );
-            } catch (_) {
-              return const AlertDialog(
-                content: Text('Failed to parse details for editing.'),
-              );
-            }
-          },
-        );
-      },
+    // 3. Populate provider
+    if (!mounted) return;
+    Provider.of<VisitProvider>(context, listen: false).populateForEdit(
+      fullVisit,
+      linkedPayment,
     );
+
+    // 4. Navigate to NewTreatmentScreen for editing
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NewTreatmentScreen(
+          visitToEdit: fullVisit,
+          paymentToEdit: linkedPayment,
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      final updatedVisit = result['visit'] as VisitModel;
+      final updatedPayment = result['payment'] as PaymentModel;
+
+      setState(() {
+        _isLoadingVisits = true;
+      });
+
+      // Update visit on backend
+      bool visitSuccess = false;
+      try {
+        final payload = {
+          "id": updatedVisit.id,
+          "parentId": _doctorId,
+          "chiefComplaintText": updatedVisit.chiefComplaintText,
+          "chiefComplaintImages": updatedVisit.chiefComplaintImages,
+          "clinicalFindingsText": updatedVisit.clinicalFindingsText,
+          "clinicalFindingsImages": updatedVisit.clinicalFindingsImages,
+          "labText": updatedVisit.labText,
+          "labImages": updatedVisit.labImages,
+          "advisedTreatmentText": updatedVisit.advisedTreatmentText,
+          "advisedTreatmentImages": updatedVisit.advisedTreatmentImages,
+          "treatmentDoneText": updatedVisit.treatmentDoneText,
+          "treatmentDoneImages": updatedVisit.treatmentDoneImages,
+          "medicationText": updatedVisit.medicationText,
+          "medicationImages": updatedVisit.medicationImages,
+          "nextAppointmentDate": updatedVisit.nextAppointmentDate.isEmpty ? null : updatedVisit.nextAppointmentDate,
+          "notes": updatedVisit.notes,
+          "status": int.tryParse(updatedVisit.status) ?? 1
+        };
+
+        final response = await VisitService.updateVisit(payload).timeout(const Duration(seconds: 5));
+        if (response.statusCode == 200) {
+          visitSuccess = true;
+        }
+      } catch (_) {}
+
+      // Update payment on backend
+      try {
+        await PaymentService.updatePaymentDetails({
+          'id': updatedPayment.id,
+          'paidAmount': updatedPayment.paidAmount,
+          'pendingAmount': updatedPayment.pendingAmount,
+          'paymentStatus': updatedPayment.paymentStatus,
+          'remarks': updatedPayment.remarks,
+        }).timeout(const Duration(seconds: 5));
+      } catch (_) {}
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(visitSuccess
+                ? 'Visit details saved and synchronized.'
+                : 'Failed to synchronize details with database.'),
+            backgroundColor: visitSuccess ? AppTheme.emeraldSuccess : AppTheme.redDestructive,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+
+      _fetchVisits();
+    }
   }
 
   @override
@@ -537,7 +493,6 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                             itemCount: _visits.length,
                             itemBuilder: (context, index) {
                               final visit = _visits[index];
-                              final isCompleted = visit.status == '1';
 
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 16),
@@ -560,34 +515,13 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                                     );
                                   },
                                   contentPadding: const EdgeInsets.all(16),
-                                  title: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        visit.visitNo.startsWith('VIS-') ? visit.visitNo : 'VIS-${visit.visitNo.padLeft(4, '0')}',
-                                        style: textTheme.titleMedium?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.primarySlate,
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: isCompleted
-                                              ? AppTheme.emeraldSuccess.withValues(alpha: 0.1)
-                                              : AppTheme.secondarySlate.withValues(alpha: 0.1),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          isCompleted ? 'Active' : 'Inactive',
-                                          style: TextStyle(
-                                            color: isCompleted ? AppTheme.emeraldSuccess : AppTheme.secondarySlate,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                                  title: Text("VST-${visit.visitNo.replaceAll(RegExp(r'[^\d]'), '').isEmpty
+                                      ? visit.visitNo
+                                      : int.parse(visit.visitNo.replaceAll(RegExp(r'[^\d]'), '')).toString().padLeft(3, '0')}",
+                                    style: textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.primarySlate,
+                                    ),
                                   ),
                                   subtitle: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -624,40 +558,9 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                                       ],
                                     ],
                                   ),
-                                  trailing: PopupMenuButton<String>(
-                                    onSelected: (action) {
-                                      if (action == 'status') {
-                                        _toggleVisitStatus(visit);
-                                      } else if (action == 'edit') {
-                                        _showEditVisitDialog(visit);
-                                      }
-                                    },
-                                    itemBuilder: (context) => [
-                                      PopupMenuItem(
-                                        value: 'status',
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              isCompleted ? Icons.cancel_outlined : Icons.check_circle_outline,
-                                              size: 18,
-                                              color: isCompleted ? AppTheme.redDestructive : AppTheme.emeraldSuccess,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(isCompleted ? 'Deactivate' : 'Activate'),
-                                          ],
-                                        ),
-                                      ),
-                                      PopupMenuItem(
-                                        value: 'edit',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.edit_outlined, size: 18, color: AppTheme.tealAccent),
-                                            const SizedBox(width: 8),
-                                            Text('Edit Details'),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.edit_outlined, color: AppTheme.tealAccent, size: 20),
+                                    onPressed: () => _showEditVisitDialog(visit),
                                   ),
                                 ),
                               );

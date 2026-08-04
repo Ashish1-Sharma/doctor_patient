@@ -18,10 +18,10 @@ class RegistrationScreen extends StatefulWidget {
 class _RegistrationScreenState extends State<RegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
   
-  final _nameController = TextEditingController(text: 'Dr. Gireesh Kumar');
-  final _emailController = TextEditingController(text: 'doctor@gmail.com');
-  final _mobileController = TextEditingController(text: '9876543210');
-  final _passwordController = TextEditingController(text: '123456');
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _mobileController = TextEditingController();
+  final _passwordController = TextEditingController();
   
   String _selectedCountry = 'India';
   String _countryCode = '+91';

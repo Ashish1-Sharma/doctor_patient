@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
+import 'company_details_screen.dart';
 
 /// Screen displaying Doctor's profile and providing option to log out.
 class ProfileScreen extends StatefulWidget {
@@ -237,6 +238,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                       ),
+                      if (_profileData!['isSubUser'] != true) ...[
+                        const SizedBox(height: 24),
+                        Text('Clinic Management', style: textTheme.labelLarge),
+                        const SizedBox(height: 12),
+                        Card(
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const CompanyDetailsScreen()),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.business_outlined, color: AppTheme.tealAccent, size: 24),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Clinic Branding & Settings',
+                                          style: textTheme.titleMedium?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            color: AppTheme.primarySlate,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        const Text(
+                                          'Configure clinic name, address, GST, and terms.',
+                                          style: TextStyle(color: AppTheme.secondarySlate, fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.secondarySlate, size: 16),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 32),
 
                       // Logout Button

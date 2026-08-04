@@ -58,11 +58,17 @@ class VisitModel {
   });
 
   factory VisitModel.fromJson(Map<String, dynamic> json) {
+    int parseId(dynamic val) {
+      if (val == null) return 0;
+      if (val is int) return val;
+      return int.tryParse(val.toString()) ?? 0;
+    }
+
     return VisitModel(
-      id: json['id'] as int? ?? 0,
-      parentId: json['parentId'] as int? ?? json['parent_id'] as int? ?? 0,
-      patientId: json['patientId'] as int? ?? json['patient_id'] as int? ?? 0,
-      doctorId: json['doctorId'] as int? ?? json['doctor_id'] as int? ?? 0,
+      id: parseId(json['id']),
+      parentId: parseId(json['parentId'] ?? json['parent_id']),
+      patientId: parseId(json['patientId'] ?? json['patient_id']),
+      doctorId: parseId(json['doctorId'] ?? json['doctor_id']),
       visitNo: json['visitNo']?.toString() ?? json['visit_no']?.toString() ?? '',
       visitDate: json['visitDate'] as String? ?? json['visit_date'] as String? ?? '',
       chiefComplaintText: json['chiefComplaintText'] as String? ?? json['chief_complaint_text'] as String? ?? '',

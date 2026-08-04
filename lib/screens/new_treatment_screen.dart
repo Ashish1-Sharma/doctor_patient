@@ -9,9 +9,19 @@ import 'steps/treatment_step.dart';
 import 'steps/payment_step.dart';
 import 'steps/invoice_step.dart';
 
+import '../models/visit_model.dart';
+import '../models/payment_model.dart';
+
 /// The main NewTreatmentScreen coordinator, managing multi-step page views and validations.
 class NewTreatmentScreen extends StatefulWidget {
-  const NewTreatmentScreen({super.key});
+  final VisitModel? visitToEdit;
+  final PaymentModel? paymentToEdit;
+
+  const NewTreatmentScreen({
+    super.key,
+    this.visitToEdit,
+    this.paymentToEdit,
+  });
 
   @override
   State<NewTreatmentScreen> createState() => _NewTreatmentScreenState();
@@ -111,10 +121,11 @@ class _NewTreatmentScreenState extends State<NewTreatmentScreen> {
   }
 
   void _finishWorkflow(VisitProvider provider) {
-    // Return the visit and payment back to the dashboard state
+    // Return the visit, payment, and optional pending appointment back to the dashboard state
     Navigator.of(context).pop({
       'visit': provider.visit,
       'payment': provider.payment,
+      'appointment': provider.pendingAppointment,
     });
   }
 
@@ -127,7 +138,7 @@ class _NewTreatmentScreenState extends State<NewTreatmentScreen> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
-          'New Treatment Record',
+          widget.visitToEdit != null ? 'Edit Treatment Record' : 'New Treatment Record',
           style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/patient_model.dart';
 import '../models/visit_model.dart';
 import '../models/payment_model.dart';
+import '../models/appointment_model.dart';
 import '../providers/visit_provider.dart';
 import '../services/patient_service.dart';
 import '../services/visit_service.dart';
@@ -14,6 +15,10 @@ import 'patient_registry_screen.dart';
 import 'new_treatment_screen.dart';
 import 'profile_screen.dart';
 import 'manage_doctors_screen.dart';
+import 'appointments_screen.dart';
+import 'payments_screen.dart';
+import '../services/appointment_service.dart';
+import '../services/payment_service.dart';
 
 /// The main DashboardScreen. Serves as the page container and coordinator of state.
 class DashboardScreen extends StatefulWidget {
@@ -31,6 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   double _totalEarnings = 0.0;
   int _pendingPaymentsCount = 0;
+  int _appointmentsCount = 0;
 
   bool _isAddButtonPressed = false;
   bool _isAddButtonHovered = false;
@@ -84,63 +90,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Fetch visits and payments dynamically
     await _fetchVisitsAndPaymentsFromApi();
-  }
 
-  Future<void> _savePaymentsToPrefs() async {
+    // Fetch appointments count from API
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final paymentsJson = _payments.map((p) => p.toJson()).toList();
-      await prefs.setString('local_payments', jsonEncode(paymentsJson));
-    } catch (_) {}
-  }
-
-  Future<List<VisitModel>> _loadLocalVisits() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final visitsStr = prefs.getString('local_visits');
-      if (visitsStr != null) {
-        final List decoded = jsonDecode(visitsStr);
-        return decoded.map((json) => VisitModel.fromJson(json)).toList();
+      final response = await AppointmentService.getAppointments(_loggedInUserId!).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        if (responseData['statusCode'] == 200 && responseData['body'] is List) {
+          final list = responseData['body'] as List;
+          setState(() {
+            _appointmentsCount = list.length;
+          });
+        }
       }
     } catch (_) {}
-    return [];
   }
 
-  Future<void> _saveLocalVisits(List<VisitModel> visits) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final visitsJson = visits.map((v) => v.toJson()).toList();
-      await prefs.setString('local_visits', jsonEncode(visitsJson));
-    } catch (_) {}
-  }
 
-  Future<void> _saveNewVisitToLocalCache(VisitModel visit) async {
-    final localVisits = await _loadLocalVisits();
-    localVisits.insert(0, visit);
-    await _saveLocalVisits(localVisits);
-  }
 
   Future<void> _fetchVisitsAndPaymentsFromApi() async {
     List<VisitModel> allVisits = [];
-    final prefs = await SharedPreferences.getInstance();
-
-    // Load cached payments
-    final paymentsStr = prefs.getString('local_payments');
-    List<PaymentModel> savedPayments = [];
-    if (paymentsStr != null) {
-      final List decoded = jsonDecode(paymentsStr);
-      savedPayments = decoded.map((json) => PaymentModel.fromJson(json)).toList();
-    } else {
-      savedPayments = [];
-    }
-
-    // Load cached visit overrides/additions
-    List<VisitModel> localVisits = [];
-    final visitsStr = prefs.getString('local_visits');
-    if (visitsStr != null) {
-      final List decoded = jsonDecode(visitsStr);
-      localVisits = decoded.map((json) => VisitModel.fromJson(json)).toList();
-    }
+    List<PaymentModel> allPayments = [];
 
     // Fetch API visits for all patients
     List<VisitModel> apiVisits = [];
@@ -166,24 +136,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (_) {}
 
-    // Merge API and local visits
-    final mergedVisits = <int, VisitModel>{};
-    for (final visit in apiVisits) {
-      mergedVisits[visit.id] = visit;
-    }
-    for (final visit in localVisits) {
-      mergedVisits[visit.id] = visit;
-    }
-
-    allVisits = mergedVisits.values.toList();
-
+    allVisits = apiVisits;
     if (allVisits.isNotEmpty) {
       allVisits.sort((a, b) => b.visitDate.compareTo(a.visitDate));
     }
 
+    // Fetch Payments from API
+    try {
+      final response = await PaymentService.getPayments(_parentId!)
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        if (responseData['statusCode'] == 200 && responseData['body'] is List) {
+          final list = responseData['body'] as List;
+          allPayments = list.map((json) => PaymentModel.fromJson(json)).toList();
+        }
+      }
+    } catch (_) {}
+
     setState(() {
       _visits = allVisits;
-      _payments = savedPayments;
+      _payments = allPayments;
     });
     _calculateStats();
   }
@@ -284,20 +257,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       });
 
-      // Save payments list locally so it persists
-      _savePaymentsToPrefs();
-
-      // Save visit locally so it persists and reflects in PatientDetailsScreen
-      _saveNewVisitToLocalCache(visit);
-
-      // Asynchronously synchronize visit details to database
-      _asyncCreateVisit(visit);
+      // Asynchronously synchronize visit, payment and appointment details to database
+      final AppointmentModel? appointment = result['appointment'] as AppointmentModel?;
+      _asyncCreateVisitAndPayment(visit, payment, appointment);
 
       _calculateStats();
     }
   }
 
-  Future<void> _asyncCreateVisit(VisitModel visit) async {
+  Future<void> _asyncCreateVisitAndPayment(VisitModel visit, PaymentModel payment, AppointmentModel? appointment) async {
     int numericVisitNo = 1;
     final match = RegExp(r'\d+').firstMatch(visit.visitNo);
     if (match != null) {
@@ -327,21 +295,106 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
 
     try {
-      final response = await VisitService.createVisit(payload)
-          .timeout(const Duration(seconds: 5));
+      print('DEBUG [DashboardScreen]: Clicked finish. Initiating visit creation...');
+      print('DEBUG [DashboardScreen]: Visit payload: $payload');
+      
+      final response = await VisitService.createVisit(payload).timeout(const Duration(seconds: 8));
+      print('DEBUG [DashboardScreen]: Visit API HTTP status: ${response.statusCode}');
+      print('DEBUG [DashboardScreen]: Visit API raw body response: ${response.body}');
+      
       final responseData = jsonDecode(response.body);
-      if ((response.statusCode == 201 || responseData['statusCode'] == 201) && mounted) {
+      print('DEBUG [DashboardScreen]: Visit response decoded: $responseData');
+      
+      final httpOk = response.statusCode == 200 || response.statusCode == 201;
+      final serverOk = responseData['statusCode'] == 200 || responseData['statusCode'] == 201;
+      
+      if (httpOk || serverOk) {
+        final rawId = responseData['body'] != null ? responseData['body']['id'] : null;
+        if (rawId == null) {
+          throw Exception('Visit created but did not return insert ID.');
+        }
+        final newVisitId = rawId is int ? rawId : int.parse(rawId.toString());
+        print('DEBUG [DashboardScreen]: Visit created successfully. Assigned database ID: $newVisitId');
+
+        // Now record payment linked to this actual newVisitId
+        final paymentPayload = {
+          "parentId": _parentId!,
+          "visitId": newVisitId,
+          "patientId": payment.patientId,
+          "invoiceNo": payment.invoiceNo,
+          "subtotal": payment.subtotal,
+          "discount": payment.discount,
+          "totalAmount": payment.totalAmount,
+          "paidAmount": payment.paidAmount,
+          "pendingAmount": payment.pendingAmount,
+          "paymentMethod": payment.paymentMethod,
+          "paymentStatus": payment.paymentStatus,
+          "paymentDate": payment.paymentDate,
+          "remarks": payment.remarks,
+          "createdBy": _loggedInUserId!,
+        };
+
+        print('DEBUG [DashboardScreen]: Initiating payment creation...');
+        print('DEBUG [DashboardScreen]: Payment payload: $paymentPayload');
+        
+        final payRes = await PaymentService.createPayment(paymentPayload).timeout(const Duration(seconds: 8));
+        print('DEBUG [DashboardScreen]: Payment API HTTP status: ${payRes.statusCode}');
+        print('DEBUG [DashboardScreen]: Payment API raw body response: ${payRes.body}');
+        
+        final payData = jsonDecode(payRes.body);
+        print('DEBUG [DashboardScreen]: Payment response decoded: $payData');
+
+        // If an appointment was configured, schedule it with the real visit ID
+        if (appointment != null) {
+          final appointmentPayload = {
+            'visitId': newVisitId,
+            'patientId': appointment.patientId,
+            'doctorId': appointment.doctorId,
+            'appointmentDate': appointment.appointmentDate,
+            'procedureText': appointment.procedureText,
+          };
+          print('DEBUG [DashboardScreen]: Clicked finish. Initiating appointment creation...');
+          print('DEBUG [DashboardScreen]: Appointment payload: $appointmentPayload');
+          
+          final apptRes = await AppointmentService.createAppointment(appointmentPayload).timeout(const Duration(seconds: 8));
+          print('DEBUG [DashboardScreen]: Appointment API HTTP status: ${apptRes.statusCode}');
+          print('DEBUG [DashboardScreen]: Appointment API raw body response: ${apptRes.body}');
+          
+          final apptData = jsonDecode(apptRes.body);
+          print('DEBUG [DashboardScreen]: Appointment response decoded: $apptData');
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Treatment visit and payment recorded in database!'),
+              backgroundColor: AppTheme.emeraldSuccess,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          );
+        }
+        _fetchVisitsAndPaymentsFromApi(); // reload lists to get server synced IDs
+      } else {
+        print('DEBUG [DashboardScreen]: Visit API returned non-success structure: statusCode=${responseData['statusCode']}, message=${responseData['message']}');
+        throw Exception('Server returned non-success response: ${responseData['message']}');
+      }
+    } catch (e, stackTrace) {
+      print('DEBUG [DashboardScreen] ERROR caught inside _asyncCreateVisitAndPayment:');
+      print(e.toString());
+      print(stackTrace.toString());
+      if (mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Treatment visit synchronized to database!'),
-            backgroundColor: AppTheme.emeraldSuccess,
+            content: Text('Failed to sync details. Error: $e'),
+            backgroundColor: AppTheme.redDestructive,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
-    } catch (_) {}
+    }
   }
 
   Future<void> _asyncUpdatePatient(PatientModel updatedP) async {
@@ -426,35 +479,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     Row(
                       children: [
-                        // Notification Button
-                        Container(
-                          margin: const EdgeInsets.only(right: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: Stack(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.notifications_none_outlined, color: AppTheme.primarySlate),
-                                onPressed: () {},
-                              ),
-                              Positioned(
-                                top: 12,
-                                right: 12,
-                                child: Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: const BoxDecoration(
-                                    color: AppTheme.redDestructive,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                         // Profile Avatar
                         GestureDetector(
                           onTap: () {
@@ -502,13 +526,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             Expanded(
                               child: StatCard(
                                 title: 'Appointments',
-                                primaryValue: '18 ',
-                                secondaryText: '6 remaining today',
+                                primaryValue: '$_appointmentsCount',
+                                secondaryText: 'Tap to view scheduler',
                                 icon: Icons.calendar_today_outlined,
                                 gradient: AppTheme.appointmentCardGradient,
                                 quickLinks: const ['Schedules', 'Calendar'],
-                                onTap: () {},
-                                onQuickLinkTap: (idx) {},
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const AppointmentsScreen()),
+                                ).then((_) => _loadDoctorProfileAndFetchPatients()),
+                                onQuickLinkTap: (idx) => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const AppointmentsScreen()),
+                                ).then((_) => _loadDoctorProfileAndFetchPatients()),
                               ),
                             ),
                             const SizedBox(width: 20),
@@ -520,8 +550,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 icon: Icons.account_balance_wallet_outlined,
                                 gradient: AppTheme.paymentCardGradient,
                                 quickLinks: const ['Invoices', 'Reports'],
-                                onTap: () {},
-                                onQuickLinkTap: (idx) {},
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const PaymentsScreen()),
+                                ).then((_) => _loadDoctorProfileAndFetchPatients()),
+                                onQuickLinkTap: (idx) => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const PaymentsScreen()),
+                                ).then((_) => _loadDoctorProfileAndFetchPatients()),
                               ),
                             ),
                           ],
@@ -547,12 +583,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           StatCard(
                             title: 'Appointments',
-                            primaryValue: '18',
-                            secondaryText: '6 remaining today',
+                            primaryValue: '$_appointmentsCount',
+                            secondaryText: 'Tap to view scheduler',
                             icon: Icons.calendar_today_outlined,
                             gradient: AppTheme.appointmentCardGradient,
                             quickLinks: const ['Schedules', 'Calendar'],
-                            onTap: () {},
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const AppointmentsScreen()),
+                            ).then((_) => _loadDoctorProfileAndFetchPatients()),
                           ),
                           StatCard(
                             title: 'Payments / Bills',
@@ -561,7 +600,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             icon: Icons.account_balance_wallet_outlined,
                             gradient: AppTheme.paymentCardGradient,
                             quickLinks: const ['Invoices', 'Reports'],
-                            onTap: () {},
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const PaymentsScreen()),
+                            ).then((_) => _loadDoctorProfileAndFetchPatients()),
                           ),
                         ],
                       ),
