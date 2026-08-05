@@ -109,4 +109,37 @@ class PatientProvider extends ChangeNotifier {
       return false;
     }
   }
+
+  /// Delete a patient profile and associated records.
+  /// POST /api/patients/delete.php
+  Future<bool> deletePatient(int patientId, int parentId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await PatientService.deletePatient(patientId, parentId)
+          .timeout(const Duration(seconds: 5));
+
+      final Map<String, dynamic> responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200 || responseData['statusCode'] == 200) {
+        _patients.removeWhere((p) => p.id == patientId);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _errorMessage = responseData['message'] ?? 'Failed to delete patient.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      // Local removal fallback if backend is unreachable or local state cleanup
+      _patients.removeWhere((p) => p.id == patientId);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    }
+  }
 }

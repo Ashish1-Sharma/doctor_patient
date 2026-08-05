@@ -29,6 +29,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
   late TextEditingController _addressController;
   late TextEditingController _emergencyNameController;
   late TextEditingController _emergencyPhoneController;
+  late TextEditingController _customConditionsController;
 
   final List<String> _availableConditions = [
     'Git','Heart','Diabetes','Hypertension','Allergy','Respiratory','Thyroid','Liver','Kidney',
@@ -66,14 +67,18 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     _emergencyNameController = TextEditingController(text: p?.emergencyContactName ?? '');
     _emergencyPhoneController = TextEditingController(text: p?.emergencyContactPhone ?? '');
 
-    // Pre-populate medical conditions in edit mode
+    // Pre-populate medical conditions in edit mode (chips and custom textfield)
+    final customList = <String>[];
     if (p != null) {
       for (final condition in p.medicalConditions) {
         if (_availableConditions.contains(condition)) {
           _selectedConditions[condition] = true;
+        } else {
+          customList.add(condition);
         }
       }
     }
+    _customConditionsController = TextEditingController(text: customList.join(', '));
 
     _loadDoctorId();
   }
@@ -90,6 +95,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     _addressController.dispose();
     _emergencyNameController.dispose();
     _emergencyPhoneController.dispose();
+    _customConditionsController.dispose();
     super.dispose();
   }
 
@@ -133,9 +139,20 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     final emName = _emergencyNameController.text.trim();
     final emPhone = _emergencyPhoneController.text.trim();
 
-    final conditions = _availableConditions
+    final customInput = _customConditionsController.text.trim();
+    final customConditions = customInput.isEmpty
+        ? <String>[]
+        : customInput
+            .split(',')
+            .map((c) => c.trim())
+            .where((c) => c.isNotEmpty)
+            .toList();
+
+    final chipConditions = _availableConditions
         .where((condition) => _selectedConditions[condition] == true)
         .toList();
+
+    final conditions = [...chipConditions, ...customConditions];
 
     if (widget.patientToEdit != null) {
       final p = widget.patientToEdit!;
@@ -214,9 +231,20 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     final emName = _emergencyNameController.text.trim();
     final emPhone = _emergencyPhoneController.text.trim();
 
-    final conditions = _availableConditions
+    final customInput = _customConditionsController.text.trim();
+    final customConditions = customInput.isEmpty
+        ? <String>[]
+        : customInput
+            .split(',')
+            .map((c) => c.trim())
+            .where((c) => c.isNotEmpty)
+            .toList();
+
+    final chipConditions = _availableConditions
         .where((condition) => _selectedConditions[condition] == true)
         .toList();
+
+    final conditions = [...chipConditions, ...customConditions];
 
     final phoneWithCode = phone.startsWith('+91') ? phone : "+91 $phone";
 
@@ -627,6 +655,22 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                                   ),
                                 );
                               }).toList(),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Other / Custom Conditions (comma-separated)',
+                              style: textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.secondarySlate,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextFormField(
+                              controller: _customConditionsController,
+                              decoration: const InputDecoration(
+                                hintText: 'Write new conditions separated by comma (e.g. Asthma, Migraine)',
+                                prefixIcon: Icon(Icons.edit_note_outlined, color: AppTheme.secondarySlate),
+                              ),
                             ),
                           ],
                         ),

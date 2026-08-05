@@ -97,5 +97,24 @@ class AuthService {
       rethrow;
     }
   }
+
+  /// Update details of an existing sub-user (Doctor/Staff).
+  /// POST /api/sub_user/updateUser.php
+  static Future<http.Response> updateSubUser(Map<String, dynamic> payload) async {
+    final url = Uri.parse('$baseUrl/sub_user/updateSubUser.php');
+    developer.log('AuthService.updateSubUser: Calling POST $url with payload: $payload');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+      developer.log('AuthService.updateSubUser: Success code ${response.statusCode}. Body: ${response.body}');
+      return response;
+    } catch (e) {
+      developer.log('AuthService.updateSubUser: Exception caught: $e');
+      rethrow;
+    }
+  }
 }
 

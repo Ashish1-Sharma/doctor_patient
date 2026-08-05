@@ -64,4 +64,23 @@ class PatientService {
       rethrow;
     }
   }
+
+  /// Delete a patient profile and associated records.
+  /// POST /api/patients/delete.php
+  static Future<http.Response> deletePatient(int id, int parentId) async {
+    final url = Uri.parse('$baseUrl/patients/delete.php');
+    developer.log('PatientService.deletePatient: Calling POST $url with id: $id, parentId: $parentId');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'id': id, 'parentId': parentId}),
+      );
+      developer.log('PatientService.deletePatient: Success code ${response.statusCode}. Body: ${response.body}');
+      return response;
+    } catch (e) {
+      developer.log('PatientService.deletePatient: Exception caught: $e');
+      rethrow;
+    }
+  }
 }

@@ -22,6 +22,8 @@ class _PatientRegistryScreenState extends State<PatientRegistryScreen> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
   int _doctorId = 1;
+  int _parentId = 1;
+  bool _isSubUser = false;
 
   @override
   void initState() {
@@ -41,16 +43,82 @@ class _PatientRegistryScreenState extends State<PatientRegistryScreen> {
       final profileStr = prefs.getString('user_profile');
       if (profileStr != null) {
         final profile = jsonDecode(profileStr);
-        final doctorId = profile['id'] as int?;
-        if (doctorId != null) {
-          _doctorId = doctorId;
-        }
+        final rawId = profile['id'];
+        final doctorId = rawId is int ? rawId : (rawId != null ? int.tryParse(rawId.toString()) : 1);
+        final isSubUser = profile['isSubUser'] == true;
+        
+        final rawParentId = isSubUser 
+            ? (profile['parentId'] ?? profile['mainAccountId'] ?? doctorId)
+            : doctorId;
+        final parentId = rawParentId is int ? rawParentId : (rawParentId != null ? int.tryParse(rawParentId.toString()) : 1);
+
+        setState(() {
+          _doctorId = doctorId ?? 1;
+          _parentId = parentId ?? 1;
+          _isSubUser = isSubUser;
+        });
       }
     } catch (_) {}
 
     // Fetch once when screen opens
     if (mounted) {
       Provider.of<PatientProvider>(context, listen: false).fetchPatients(_doctorId);
+    }
+  }
+
+  Future<void> _confirmAndDeletePatient(PatientModel patient) async {
+    if (_isSubUser) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access Denied: Only Admin has permission to delete patients.'),
+          backgroundColor: AppTheme.redDestructive,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Patient Record?'),
+        content: Text('Are you sure you want to delete ${patient.fullName} (${patient.patientCode}) and all associated records?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: AppTheme.redDestructive, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      final provider = Provider.of<PatientProvider>(context, listen: false);
+      final success = await provider.deletePatient(patient.id, _parentId);
+
+      if (!mounted) return;
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Patient ${patient.fullName} deleted successfully.'),
+            backgroundColor: AppTheme.emeraldSuccess,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(provider.errorMessage ?? 'Failed to delete patient.'),
+            backgroundColor: AppTheme.redDestructive,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -412,7 +480,7 @@ class _PatientRegistryScreenState extends State<PatientRegistryScreen> {
                                                   ),
                                                 ],
                                               ),
-                                              // WhatsApp and Call Quick Action Icons
+                                              // WhatsApp, Call, and Admin Delete Quick Action Icons
                                               Row(
                                                 children: [
                                                   IconButton(
@@ -428,6 +496,15 @@ class _PatientRegistryScreenState extends State<PatientRegistryScreen> {
                                                     padding: EdgeInsets.zero,
                                                     constraints: const BoxConstraints(),
                                                   ),
+                                                  if (!_isSubUser) ...[
+                                                    const SizedBox(width: 12),
+                                                    IconButton(
+                                                      icon: const Icon(Icons.delete_outline, color: AppTheme.redDestructive, size: 18),
+                                                      onPressed: () => _confirmAndDeletePatient(patient),
+                                                      padding: EdgeInsets.zero,
+                                                      constraints: const BoxConstraints(),
+                                                    ),
+                                                  ],
                                                 ],
                                               ),
                                             ],

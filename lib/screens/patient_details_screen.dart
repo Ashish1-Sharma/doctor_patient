@@ -7,6 +7,7 @@ import '../models/patient_model.dart';
 import '../models/visit_model.dart';
 import '../models/payment_model.dart';
 import '../providers/visit_provider.dart';
+import '../providers/patient_provider.dart';
 import '../services/visit_service.dart';
 import '../services/patient_service.dart';
 import '../services/payment_service.dart';
@@ -30,6 +31,8 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
   bool _isLoadingVisits = false;
   String? _errorMessage;
   int _doctorId = 1;
+  int _parentId = 1;
+  bool _isSubUser = false;
 
   @override
   void initState() {
@@ -44,14 +47,83 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
       final profileStr = prefs.getString('user_profile');
       if (profileStr != null) {
         final profile = jsonDecode(profileStr);
-        final doctorId = profile['id'] as int?;
-        if (doctorId != null) {
-          _doctorId = doctorId;
-        }
+        final rawId = profile['id'];
+        final doctorId = rawId is int ? rawId : (rawId != null ? int.tryParse(rawId.toString()) : 1);
+        final isSubUser = profile['isSubUser'] == true;
+        
+        final rawParentId = isSubUser 
+            ? (profile['parentId'] ?? profile['mainAccountId'] ?? doctorId)
+            : doctorId;
+        final parentId = rawParentId is int ? rawParentId : (rawParentId != null ? int.tryParse(rawParentId.toString()) : 1);
+
+        setState(() {
+          _doctorId = doctorId ?? 1;
+          _parentId = parentId ?? 1;
+          _isSubUser = isSubUser;
+        });
       }
     } catch (_) {}
 
     _fetchVisits();
+  }
+
+  Future<void> _confirmAndDeletePatient() async {
+    if (_isSubUser) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access Denied: Only Admin has permission to delete patients.'),
+          backgroundColor: AppTheme.redDestructive,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Patient & All Records?'),
+        content: Text(
+          'Are you sure you want to permanently delete ${_currentPatient.fullName} (${_currentPatient.patientCode}) and all associated visit records?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: AppTheme.redDestructive, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      final provider = Provider.of<PatientProvider>(context, listen: false);
+      final success = await provider.deletePatient(_currentPatient.id, _parentId);
+
+      if (!mounted) return;
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Patient ${_currentPatient.fullName} and records deleted.'),
+            backgroundColor: AppTheme.emeraldSuccess,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.pop(context, true);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(provider.errorMessage ?? 'Failed to delete patient.'),
+            backgroundColor: AppTheme.redDestructive,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _fetchVisits() async {
@@ -300,6 +372,14 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
           icon: const Icon(Icons.arrow_back_ios_new, color: AppTheme.primarySlate),
           onPressed: () => Navigator.of(context).pop(true), // Return true to trigger registry reload
         ),
+        actions: [
+          if (!_isSubUser)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: AppTheme.redDestructive),
+              tooltip: 'Delete Patient Record',
+              onPressed: _confirmAndDeletePatient,
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -360,6 +440,17 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                         ),
                         icon: const Icon(Icons.edit_outlined, size: 18),
                       ),
+                      if (!_isSubUser) ...[
+                        const SizedBox(width: 6),
+                        IconButton.filledTonal(
+                          onPressed: _confirmAndDeletePatient,
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: AppTheme.redDestructive,
+                          ),
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                        ),
+                      ],
                     ],
                   ),
                   if (_currentPatient.address.isNotEmpty) ...[

@@ -15,6 +15,7 @@ class _ManageDoctorsScreenState extends State<ManageDoctorsScreen> {
   List<dynamic> _doctors = [];
   bool _isLoading = true;
   int _parentId = 0;
+  String _parentEmail = '';
   String _errorMessage = '';
 
   @override
@@ -31,9 +32,11 @@ class _ManageDoctorsScreenState extends State<ManageDoctorsScreen> {
         final profile = jsonDecode(profileStr);
         final rawId = profile['id'];
         final parentId = rawId is int ? rawId : (rawId != null ? int.tryParse(rawId.toString()) : null);
+        final parentEmail = profile['userEmail'] as String? ?? profile['email'] as String? ?? profile['parentEmail'] as String? ?? '';
         if (parentId != null) {
           setState(() {
             _parentId = parentId;
+            _parentEmail = parentEmail;
           });
           await _fetchDoctors();
           return;
@@ -286,6 +289,175 @@ class _ManageDoctorsScreenState extends State<ManageDoctorsScreen> {
     );
   }
 
+  void _openEditDoctorDialog(Map<String, dynamic> doc) {
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController(text: doc['userName'] ?? doc['name'] ?? '');
+    final emailController = TextEditingController(text: doc['userEmail'] ?? '');
+    final mobileController = TextEditingController(text: doc['userMobile'] ?? '');
+    final passwordController = TextEditingController();
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            top: 24,
+            left: 24,
+            right: 24,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+          ),
+          child: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Edit Doctor / Staff Details',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primarySlate,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
+                  
+                  // Name Field
+                  const Text('Doctor Name', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: nameController,
+                    decoration: const InputDecoration(hintText: 'e.g. Dr. Ramesh Kumar'),
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter name' : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Email Field
+                  const Text('Doctor Email', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: emailController,
+                    decoration: const InputDecoration(hintText: 'e.g. doctor@gmail.com'),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter email' : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Mobile Field
+                  const Text('Mobile Number', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: mobileController,
+                    decoration: const InputDecoration(hintText: 'e.g. 9876543210'),
+                    keyboardType: TextInputType.phone,
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter mobile number' : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Password Field (Optional on Edit)
+                  const Text('New Password (Optional)', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: passwordController,
+                    decoration: const InputDecoration(hintText: 'Leave blank to keep existing password'),
+                    obscureText: true,
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Submit Button
+                  ElevatedButton(
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            if (!formKey.currentState!.validate()) return;
+                            
+                            setModalState(() {
+                              isSaving = true;
+                            });
+
+                            final passwordText = passwordController.text.trim();
+                            final subEmail = emailController.text.trim();
+
+                            final Map<String, dynamic> payload = {
+                              "id": doc['id'],
+                              "parentId": _parentId,
+                              "parentEmail": _parentEmail,
+                              "userName": nameController.text.trim(),
+                              "name": nameController.text.trim(),
+                              "userEmail": subEmail,
+                              "email": subEmail,
+                              "userMobile": mobileController.text.trim(),
+                              "mobile": mobileController.text.trim(),
+                              "password": passwordText.isNotEmpty
+                                  ? passwordText
+                                  : (doc['password']?.toString() ?? doc['inputPassword']?.toString() ?? ''),
+                            };
+
+                            try {
+                              final response = await AuthService.updateSubUser(payload)
+                                  .timeout(const Duration(seconds: 5));
+                              
+                              final responseData = jsonDecode(response.body);
+                              
+                              if (response.statusCode == 200 || responseData['statusCode'] == 200) {
+                                if (context.mounted) {
+                                  Navigator.pop(ctx);
+                                  _showNotification('Doctor details updated successfully!', AppTheme.emeraldSuccess, Icons.check_circle_outline);
+                                  _fetchDoctors();
+                                }
+                              } else {
+                                setModalState(() {
+                                  isSaving = false;
+                                });
+                                _showNotification(responseData['message'] ?? 'Failed to update doctor details.', AppTheme.redDestructive, Icons.error_outline);
+                              }
+                            } catch (_) {
+                              setModalState(() {
+                                isSaving = false;
+                              });
+                              _showNotification('Network connection failed.', AppTheme.redDestructive, Icons.cloud_off_rounded);
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.tealAccent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    child: isSaving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text('Update Doctor Account', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -408,16 +580,32 @@ class _ManageDoctorsScreenState extends State<ManageDoctorsScreen> {
                                       ],
                                     ),
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF1F5F9),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      'ID: $docId',
-                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.secondarySlate),
-                                    ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF1F5F9),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          'ID: $docId',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.secondarySlate),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      IconButton.filledTonal(
+                                        onPressed: () => _openEditDoctorDialog(doc),
+                                        style: IconButton.styleFrom(
+                                          backgroundColor: AppTheme.tealAccent.withValues(alpha: 0.1),
+                                          foregroundColor: AppTheme.tealAccent,
+                                          minimumSize: const Size(36, 36),
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                        icon: const Icon(Icons.edit_outlined, size: 18),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
