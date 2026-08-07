@@ -181,6 +181,8 @@ class VisitProvider extends ChangeNotifier {
 
   /// Step 5: Update Payment figures.
   void updatePayment({
+    required double subtotal,
+    required double discount,
     required double total,
     required double paid,
     required String method,
@@ -199,8 +201,8 @@ class VisitProvider extends ChangeNotifier {
       visitId: _payment.visitId,
       patientId: _payment.patientId,
       invoiceNo: _payment.invoiceNo,
-      subtotal: total,
-      discount: 0.0,
+      subtotal: subtotal,
+      discount: discount,
       totalAmount: total,
       paidAmount: paid,
       pendingAmount: pending < 0 ? 0.0 : pending,

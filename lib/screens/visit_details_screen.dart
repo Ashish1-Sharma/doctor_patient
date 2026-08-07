@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/visit_model.dart';
 import '../models/appointment_model.dart';
 import '../services/visit_service.dart';
 import '../services/appointment_service.dart';
 import '../theme/app_theme.dart';
+import 'patient_visit_report_screen.dart';
 
 /// A premium full-screen display for Clinical Visit Details.
 class VisitDetailsScreen extends StatefulWidget {
@@ -25,12 +27,38 @@ class VisitDetailsScreen extends StatefulWidget {
 class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
   late Future<http.Response> _visitFuture;
   AppointmentModel? _linkedAppointment;
+  bool _isSubUser = false;
+  int _parentId = 1;
 
   @override
   void initState() {
     super.initState();
     _visitFuture = VisitService.getVisitById(widget.doctorId, widget.visitId);
     _loadLinkedAppointment();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final profileStr = prefs.getString('user_profile');
+      if (profileStr != null) {
+        final profile = jsonDecode(profileStr);
+        final isSubUser = profile['isSubUser'] == true;
+        final rawId = profile['id'];
+        final doctorId = rawId is int ? rawId : (rawId != null ? int.tryParse(rawId.toString()) : 1);
+        final rawParentId = isSubUser
+            ? (profile['parentId'] ?? profile['mainAccountId'] ?? doctorId)
+            : doctorId;
+        final parentId = rawParentId is int ? rawParentId : (rawParentId != null ? int.tryParse(rawParentId.toString()) : 1);
+        if (mounted) {
+          setState(() {
+            _isSubUser = isSubUser;
+            _parentId = parentId ?? 1;
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadLinkedAppointment() async {
@@ -48,6 +76,77 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
         }
       }
     } catch (_) {}
+  }
+
+  Future<void> _confirmAndDeleteVisit() async {
+    if (_isSubUser) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access Denied: Only Admin has permission to delete visits.'),
+          backgroundColor: AppTheme.redDestructive,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete This Visit?'),
+        content: const Text(
+          'Are you sure you want to permanently delete this visit and all associated payment records? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: AppTheme.redDestructive, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      try {
+        final response = await VisitService.deleteVisit(widget.visitId, _parentId)
+            .timeout(const Duration(seconds: 5));
+        final responseData = jsonDecode(response.body);
+
+        if (!mounted) return;
+
+        if (response.statusCode == 200 || responseData['statusCode'] == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Visit deleted successfully.'),
+              backgroundColor: AppTheme.emeraldSuccess,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          Navigator.pop(context, true);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(responseData['message'] ?? 'Failed to delete visit.'),
+              backgroundColor: AppTheme.redDestructive,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Network error. Could not delete visit.'),
+            backgroundColor: AppTheme.redDestructive,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
 
@@ -216,6 +315,15 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: AppTheme.primarySlate,
+        actions: [
+          if (!_isSubUser)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: AppTheme.redDestructive),
+              onPressed: _confirmAndDeleteVisit,
+              tooltip: 'Delete Visit',
+            ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: FutureBuilder<http.Response>(
         future: _visitFuture,
@@ -353,9 +461,34 @@ class _VisitDetailsScreenState extends State<VisitDetailsScreen> {
                       title: 'Linked Appointment Details',
                       content: 'Date & Time: ${_linkedAppointment!.appointmentDate}\nProcedure: ${_linkedAppointment!.procedureText}\nStatus: ${_linkedAppointment!.status}',
                     ),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => PatientVisitReportScreen(
+                            parentId: details.parentId,
+                            visitId: details.id,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.print_outlined),
+                    label: const Text('Print / View Patient Report', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.tealAccent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                 ],
               ),
             );
+
           } catch (_) {
             return const Center(child: Text('Failed to load visit details format.'));
           }

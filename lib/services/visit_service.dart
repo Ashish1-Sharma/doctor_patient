@@ -92,6 +92,31 @@ class VisitService {
     }
   }
 
+  /// Fetch consolidated visit report details (visit + patient + clinic + payment) for printing.
+  /// POST /api/visits/getVisitReportDetails.php
+  static Future<http.Response> getVisitReportDetails(int parentId, int visitId) async {
+    final url = Uri.parse('$baseUrl/visits/getVisitReportDetails.php');
+    final payload = {
+      'parentId': parentId,
+      'visitId': visitId,
+    };
+    developer.log('VisitService.getVisitReportDetails: Calling POST $url with payload: $payload');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+      developer.log('VisitService.getVisitReportDetails: Success code ${response.statusCode}. Body: ${response.body}');
+      // ignore: avoid_print
+      print('VisitService.getVisitReportDetails response [${response.statusCode}]: ${response.body}');
+      return response;
+    } catch (e) {
+      developer.log('VisitService.getVisitReportDetails: Exception caught: $e');
+      rethrow;
+    }
+  }
+
   /// Change status of a specific visit.
   /// POST /api/visits/changeStatus.php
   static Future<http.Response> changeVisitStatus(int id, int parentId, int status) async {
@@ -112,6 +137,29 @@ class VisitService {
       return response;
     } catch (e) {
       developer.log('VisitService.changeVisitStatus: Exception caught: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete a specific visit and its associated records.
+  /// POST /api/visits/delete.php
+  static Future<http.Response> deleteVisit(int id, int parentId) async {
+    final url = Uri.parse('$baseUrl/visits/delete.php');
+    final payload = {
+      'id': id,
+      'parentId': parentId,
+    };
+    developer.log('VisitService.deleteVisit: Calling POST $url with payload: $payload');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+      developer.log('VisitService.deleteVisit: Success code ${response.statusCode}. Body: ${response.body}');
+      return response;
+    } catch (e) {
+      developer.log('VisitService.deleteVisit: Exception caught: $e');
       rethrow;
     }
   }

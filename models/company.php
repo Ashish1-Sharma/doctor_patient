@@ -10,8 +10,11 @@ class Company
     public $userId;
     public $companyName;
     public $companyAddress;
-    public $gst;
-    public $dlNo;
+    public $clinic_reg_no;
+    public $pollution_control_cert;
+    public $trade_license;
+    public $municipality_noc;
+    public $doctor_reg_cert;
     public $terms;
 
     // DB fields
@@ -25,14 +28,17 @@ class Company
 
     public function create($data)
     {
-        $data['gst'] = empty($data['gst']) ? null : $data['gst'];
-        $data['dlNo'] = empty($data['dlNo']) ? null : $data['dlNo'];
+        $data['clinic_reg_no'] = empty($data['clinic_reg_no']) ? null : $data['clinic_reg_no'];
+        $data['pollution_control_cert'] = empty($data['pollution_control_cert']) ? null : $data['pollution_control_cert'];
+        $data['trade_license'] = empty($data['trade_license']) ? null : $data['trade_license'];
+        $data['municipality_noc'] = empty($data['municipality_noc']) ? null : $data['municipality_noc'];
+        $data['doctor_reg_cert'] = empty($data['doctor_reg_cert']) ? null : $data['doctor_reg_cert'];
         $data['terms'] = empty($data['terms']) ? null : $data['terms'];
 
         $query = "INSERT INTO $this->table 
-            (userId, companyName, companyAddress, gst, dlNo, terms) 
+            (userId, companyName, companyAddress, clinic_reg_no, pollution_control_cert, trade_license, municipality_noc, doctor_reg_cert, terms) 
             VALUES 
-            (:userId, :companyName, :companyAddress, :gst, :dlNo, :terms)";
+            (:userId, :companyName, :companyAddress, :clinic_reg_no, :pollution_control_cert, :trade_license, :municipality_noc, :doctor_reg_cert, :terms)";
 
         $stmt = $this->connection->prepare($query);
 
@@ -98,8 +104,11 @@ public function getByUserId($userId)
     public function update($id, $data)
     {
         // Ensure optional fields are set to NULL if not provided
-        $data['gst'] = empty($data['gst']) ? null : $data['gst'];
-        $data['dlNo'] = empty($data['dlNo']) ? null : $data['dlNo'];
+        $data['clinic_reg_no'] = empty($data['clinic_reg_no']) ? null : $data['clinic_reg_no'];
+        $data['pollution_control_cert'] = empty($data['pollution_control_cert']) ? null : $data['pollution_control_cert'];
+        $data['trade_license'] = empty($data['trade_license']) ? null : $data['trade_license'];
+        $data['municipality_noc'] = empty($data['municipality_noc']) ? null : $data['municipality_noc'];
+        $data['doctor_reg_cert'] = empty($data['doctor_reg_cert']) ? null : $data['doctor_reg_cert'];
         $data['terms'] = empty($data['terms']) ? null : $data['terms'];
 
         // Prepare the update query
@@ -107,8 +116,11 @@ public function getByUserId($userId)
             userId = :userId,
             companyName = :companyName,
             companyAddress = :companyAddress,
-            gst = :gst,
-            dlNo = :dlNo,
+            clinic_reg_no = :clinic_reg_no,
+            pollution_control_cert = :pollution_control_cert,
+            trade_license = :trade_license,
+            municipality_noc = :municipality_noc,
+            doctor_reg_cert = :doctor_reg_cert,
             terms = :terms
             WHERE id = :id";
 

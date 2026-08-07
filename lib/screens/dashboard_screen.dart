@@ -491,8 +491,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           },
                           child: const CircleAvatar(
                             radius: 22,
-                            backgroundImage: NetworkImage(
-                              'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150',
+                            backgroundImage: AssetImage(
+                              'assets/doctor.jpeg',
                             ),
                           ),
                         ),

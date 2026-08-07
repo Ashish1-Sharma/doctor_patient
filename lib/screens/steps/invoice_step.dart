@@ -179,6 +179,10 @@ class _InvoiceStepState extends State<InvoiceStep> {
     buffer.writeln('');
     buffer.writeln('💳 *INVOICE DETAILS*');
     buffer.writeln('🧾 *Invoice No:* ${payment.invoiceNo}');
+    buffer.writeln('💵 *Subtotal:* ₹${payment.subtotal.toStringAsFixed(2)}');
+    if (payment.discount > 0) {
+      buffer.writeln('🧧 *Discount:* -₹${payment.discount.toStringAsFixed(2)}');
+    }
     buffer.writeln('💵 *Total Cost:* ₹${payment.totalAmount.toStringAsFixed(2)}');
     buffer.writeln('💰 *Paid Amount:* ₹${payment.paidAmount.toStringAsFixed(2)}');
     buffer.writeln('⏳ *Pending Balance:* ₹${payment.pendingAmount.toStringAsFixed(2)}');
@@ -406,6 +410,10 @@ class _InvoiceStepState extends State<InvoiceStep> {
                 const Divider(color: Color(0xFFF1F5F9), height: 32),
                 
                 _buildAmountRow(context, 'Subtotal', payment.subtotal, isBold: false),
+                if (payment.discount > 0) ...[
+                  const SizedBox(height: 8),
+                  _buildAmountRow(context, 'Discount Applied', payment.discount, isBold: false, isDiscount: true),
+                ],
                 const SizedBox(height: 8),
                 _buildAmountRow(context, 'Total Cost', payment.totalAmount, isBold: true),
                 const SizedBox(height: 8),
@@ -620,10 +628,12 @@ class _InvoiceStepState extends State<InvoiceStep> {
     bool isBold = false,
     bool isPaid = false,
     bool isPending = false,
+    bool isDiscount = false,
   }) {
     Color amountColor = AppTheme.primarySlate;
     if (isPaid) amountColor = AppTheme.emeraldSuccess;
     if (isPending && value > 0) amountColor = AppTheme.amberWarning;
+    if (isDiscount) amountColor = AppTheme.redDestructive;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -641,7 +651,7 @@ class _InvoiceStepState extends State<InvoiceStep> {
         ),
         const SizedBox(width: 8),
         Text(
-          '₹${value.toStringAsFixed(2)}',
+          isDiscount ? '-₹${value.toStringAsFixed(2)}' : '₹${value.toStringAsFixed(2)}',
           style: TextStyle(
             color: amountColor,
             fontWeight: isBold ? FontWeight.bold : FontWeight.normal,

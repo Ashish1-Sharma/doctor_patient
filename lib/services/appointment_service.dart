@@ -45,4 +45,23 @@ class AppointmentService {
       rethrow;
     }
   }
+
+  /// Update/reschedule an existing appointment.
+  /// POST /api/appointments/update.php
+  static Future<http.Response> updateAppointment(Map<String, dynamic> payload) async {
+    final url = Uri.parse('$baseUrl/appointments/update.php');
+    developer.log('AppointmentService.updateAppointment: Calling POST $url with payload: $payload');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+      developer.log('AppointmentService.updateAppointment: Code ${response.statusCode}.');
+      return response;
+    } catch (e) {
+      developer.log('AppointmentService.updateAppointment: Exception caught: $e');
+      rethrow;
+    }
+  }
 }

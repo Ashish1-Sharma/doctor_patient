@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Patient Visit Report</title>
+    <style>
+        /* Design Tokens & Styling */
+        @page {
+            size: A4 portrait;
+            margin: 15mm 15mm 15mm 15mm;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #1e293b; /* Charcoal/Dark Slate */
+            background-color: #ffffff;
+            margin: 0;
+            padding: 0;
+            line-height: 1.4;
+            font-size: 11pt;
+            -webkit-print-color-adjust: exact;
+        }
+
+        .report-container {
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        /* Icons */
+        .svg-icon {
+            width: 16px;
+            height: 16px;
+            fill: none;
+            stroke: #0f4c81; /* Medical Navy Blue */
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            vertical-align: middle;
+            display: inline-block;
+        }
+        
+        .svg-icon-gray {
+            stroke: #64748b;
+        }
+
+        /* Header section */
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+        }
+
+        .header-logo-cell {
+            vertical-align: top;
+            width: 55%;
+        }
+
+        .header-logo-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-svg {
+            width: 48px;
+            height: 48px;
+            stroke: #0f4c81;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .clinic-brand {
+            display: inline-block;
+            vertical-align: top;
+        }
+
+        .clinic-name {
+            font-size: 18pt;
+            font-weight: 800;
+            color: #0f4c81;
+            margin: 0;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .clinic-tagline {
+            font-size: 9pt;
+            color: #64748b;
+            margin: 2px 0 0 0;
+            font-weight: 500;
+        }
+
+        .header-contact-cell {
+            vertical-align: top;
+            width: 45%;
+            text-align: right;
+            font-size: 9pt;
+            color: #1e293b;
+        }
+
+        .contact-item {
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+
+        .header-divider {
+            border: 0;
+            height: 1.5px;
+            background-color: #000000;
+            margin: 8px 0 15px 0;
+        }
+
+        /* Report Title */
+        .report-title {
+            text-align: center;
+            font-size: 16pt;
+            font-weight: 700;
+            color: #000000;
+            margin: 0 0 15px 0;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* Visit Summary Info Grid */
+        .summary-box {
+            width: 100%;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            border-collapse: separate;
+            margin-bottom: 16px;
+        }
+
+        .summary-cell {
+            width: 33.33%;
+            padding: 10px 12px;
+            vertical-align: middle;
+        }
+        
+        .summary-cell-border {
+            border-right: 1px dashed #e2e8f0;
+        }
+
+        .summary-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .summary-icon {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .summary-details {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .summary-label {
+            font-size: 8pt;
+            color: #64748b;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .summary-value {
+            font-size: 10pt;
+            font-weight: 700;
+            color: #1e293b;
+            margin-top: 1px;
+        }
+
+        /* Two Column Cards */
+        .columns-container {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+            margin-bottom: 16px;
+        }
+
+        .column {
+            display: table-cell;
+            width: 50%;
+            vertical-align: top;
+        }
+
+        .column-left {
+            padding-right: 10px;
+        }
+
+        .column-right {
+            padding-left: 10px;
+        }
+
+        .card {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            height: 100%;
+            background-color: #ffffff;
+            box-sizing: border-box;
+        }
+
+        .card-header {
+            background-color: #f8fafc;
+            padding: 8px 12px;
+            font-size: 8.5pt;
+            font-weight: 700;
+            color: #0f4c81;
+            border-bottom: 1px solid #e2e8f0;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .card-body {
+            padding: 12px;
+            min-height: 120px;
+        }
+
+        .clinic-name-bold {
+            font-weight: 700;
+            font-size: 10.5pt;
+            margin: 0 0 8px 0;
+            color: #1e293b;
+        }
+
+        .card-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .card-list-item {
+            margin-bottom: 6px;
+            font-size: 9.5pt;
+            color: #1e293b;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .card-list-item:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Patient Info Table */
+        .patient-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .patient-table td {
+            padding: 4px 0;
+            font-size: 9.5pt;
+            vertical-align: top;
+            color: #1e293b;
+        }
+
+        .patient-label {
+            font-weight: 700;
+            width: 100px;
+        }
+
+        .patient-separator {
+            width: 15px;
+            text-align: center;
+            font-weight: normal;
+        }
+
+        .patient-value {
+            font-weight: 400;
+        }
+
+        /* Clinical Details Card style */
+        .clinical-section {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            background-color: #ffffff;
+        }
+
+        .clinical-header {
+            background-color: #f8fafc;
+            padding: 8px 12px;
+            font-size: 9pt;
+            font-weight: 700;
+            color: #0f4c81;
+            border-bottom: 1px solid #e2e8f0;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            letter-spacing: 0.5px;
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        .clinical-body {
+            padding: 0;
+        }
+
+        .clinical-row {
+            display: table;
+            width: 100%;
+            padding: 10px 12px;
+            box-sizing: border-box;
+            border-bottom: 1px dashed #e2e8f0;
+            table-layout: fixed;
+        }
+
+        .clinical-row:last-child {
+            border-bottom: none;
+        }
+
+        .clinical-row-left {
+            display: table-cell;
+            width: 200px;
+            vertical-align: middle;
+            font-weight: 700;
+            font-size: 9.5pt;
+            color: #1e293b;
+        }
+        
+        .clinical-row-left-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .clinical-row-separator {
+            display: table-cell;
+            width: 20px;
+            vertical-align: middle;
+            text-align: center;
+            color: #1e293b;
+            font-size: 9.5pt;
+        }
+
+        .clinical-row-value {
+            display: table-cell;
+            vertical-align: middle;
+            font-size: 9.5pt;
+            color: #1e293b;
+            word-wrap: break-word;
+        }
+
+        .medication-list {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .medication-list li {
+            margin-bottom: 3px;
+        }
+
+        /* Payment Summary Section */
+        .payment-section {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            background-color: #ffffff;
+        }
+
+        .payment-header {
+            background-color: #f8fafc;
+            padding: 8px 12px;
+            font-size: 8.5pt;
+            font-weight: 700;
+            color: #0f4c81;
+            border-bottom: 1px solid #e2e8f0;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .payment-body {
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .payment-total-container {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+        }
+
+        .payment-total-label {
+            font-size: 9.5pt;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+        .payment-total-value {
+            font-size: 14pt;
+            font-weight: 800;
+            color: #0f4c81;
+        }
+
+        .payment-date-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 9.5pt;
+            color: #1e293b;
+        }
+
+        .payment-date-label {
+            font-weight: 700;
+        }
+
+        /* Terms & Conditions Section */
+        .terms-section {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            background-color: #ffffff;
+        }
+
+        .terms-header {
+            background-color: #f8fafc;
+            padding: 8px 12px;
+            font-size: 8.5pt;
+            font-weight: 700;
+            color: #0f4c81;
+            border-bottom: 1px solid #e2e8f0;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .terms-body {
+            padding: 10px 14px;
+            font-size: 8.5pt;
+            color: #1e293b;
+        }
+
+        .terms-list {
+            margin: 0;
+            padding-left: 16px;
+        }
+
+        .terms-list li {
+            margin-bottom: 4px;
+        }
+        
+        .terms-list li:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Footer */
+        .footer-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 30px;
+            gap: 15px;
+        }
+
+        .footer-line {
+            flex-grow: 1;
+            height: 1px;
+            background-color: #0f4c81;
+        }
+
+        .footer-text {
+            color: #0f4c81;
+            font-weight: 700;
+            font-size: 9.5pt;
+            white-space: nowrap;
+            letter-spacing: 0.5px;
+        }
+
+        /* PDF Page Break Management */
+        .card, .summary-box, .clinical-section, .payment-section, .terms-section {
+            page-break-inside: avoid;
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <!-- 1. Header Table -->
+        <table class="header-table">
+            <tr>
+                <td class="header-logo-cell">
+                    <div class="header-logo-container">
+                        <!-- Custom Tooth + Plus SVG Logo -->
+                        <svg class="logo-svg" viewBox="0 0 100 100">
+                            <!-- Tooth path -->
+                            <path d="M 25 15 C 35 15, 38 25, 50 25 C 62 25, 65 15, 75 15 C 85 15, 90 28, 88 45 C 85 68, 70 85, 50 90 C 30 85, 15 68, 12 45 C 10 28, 15 15, 25 15 Z" />
+                            <!-- Plus sign background / accents -->
+                            <path d="M 68 62 L 84 62 M 76 54 L 76 70" stroke="#10b981" stroke-width="4" stroke-linecap="round" />
+                        </svg>
+                        <div class="clinic-brand">
+                            <h1 class="clinic-name">{{clinic.name}}</h1>
+                            <p class="clinic-tagline">Your Smile, Our Care</p>
+                        </div>
+                    </div>
+                </td>
+                <td class="header-contact-cell">
+                    <div class="contact-item">
+                        <span>{{clinic.address}}</span>
+                        <svg class="svg-icon svg-icon-gray" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    </div>
+                    <div class="contact-item">
+                        <span>{{clinic.phone}}</span>
+                        <svg class="svg-icon svg-icon-gray" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                    </div>
+                    <div class="contact-item">
+                        <span>{{clinic.email}}</span>
+                        <svg class="svg-icon svg-icon-gray" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                    </div>
+                    <div class="contact-item">
+                        <span>{{clinic.website}}</span>
+                        <svg class="svg-icon svg-icon-gray" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                    </div>
+                </td>
+            </tr>
+        </table>
+        
+        <hr class="header-divider" />
+
+        <!-- 2. Report Title -->
+        <h2 class="report-title">Patient Visit Report</h2>
+
+        <!-- 3. Visit Summary -->
+        <table class="summary-box">
+            <tr>
+                <td class="summary-cell summary-cell-border">
+                    <div class="summary-item">
+                        <div class="summary-icon">
+                            <svg class="svg-icon" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="9"></line><line x1="9" y1="13" x2="15" y2="13"></line><line x1="9" y1="17" x2="13" y2="17"></line></svg>
+                        </div>
+                        <div class="summary-details">
+                            <span class="summary-label">Invoice No</span>
+                            <span class="summary-value">{{visit.invoice_no}}</span>
+                        </div>
+                    </div>
+                </td>
+                <td class="summary-cell summary-cell-border">
+                    <div class="summary-item">
+                        <div class="summary-icon">
+                            <svg class="svg-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        </div>
+                        <div class="summary-details">
+                            <span class="summary-label">Visit No</span>
+                            <span class="summary-value">{{visit.visit_no}}</span>
+                        </div>
+                    </div>
+                </td>
+                <td class="summary-cell">
+                    <div class="summary-item">
+                        <div class="summary-icon">
+                            <svg class="svg-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        </div>
+                        <div class="summary-details">
+                            <span class="summary-label">Visit Date</span>
+                            <span class="summary-value">{{visit.visit_date}}</span>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        </table>
+
+        <!-- 4. Two Column Section -->
+        <div class="columns-container">
+            <!-- Left Column: Clinic/Company details -->
+            <div class="column column-left">
+                <div class="card">
+                    <div class="card-header">Company / Clinic Details</div>
+                    <div class="card-body">
+                        <h3 class="clinic-name-bold">{{clinic.name}}</h3>
+                        <ul class="card-list">
+                            <li class="card-list-item">
+                                <svg class="svg-icon svg-icon-gray" style="margin-top: 2px;" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                <span>{{clinic.address}}</span>
+                            </li>
+                            <!-- IF clinic.gst -->
+                            <li class="card-list-item">
+                                <svg class="svg-icon svg-icon-gray" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="9"></line><line x1="9" y1="13" x2="15" y2="13"></line><line x1="9" y1="17" x2="13" y2="17"></line></svg>
+                                <span>GST: {{clinic.gst}}</span>
+                            </li>
+                            <!-- ENDIF clinic.gst -->
+                            <!-- IF clinic.dl -->
+                            <li class="card-list-item">
+                                <svg class="svg-icon svg-icon-gray" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                <span>DL: {{clinic.dl}}</span>
+                            </li>
+                            <!-- ENDIF clinic.dl -->
+                            <!-- IF clinic.trade_license -->
+                            <li class="card-list-item">
+                                <svg class="svg-icon svg-icon-gray" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                <span>Trade License: {{clinic.trade_license}}</span>
+                            </li>
+                            <!-- ENDIF clinic.trade_license -->
+                            <!-- IF clinic.municipality_noc -->
+                            <li class="card-list-item">
+                                <svg class="svg-icon svg-icon-gray" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                <span>Municipality NOC: {{clinic.municipality_noc}}</span>
+                            </li>
+                            <!-- ENDIF clinic.municipality_noc -->
+                            <!-- IF clinic.doctor_reg_cert -->
+                            <li class="card-list-item">
+                                <svg class="svg-icon svg-icon-gray" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                                <span>Doc Reg Cert: {{clinic.doctor_reg_cert}}</span>
+                            </li>
+                            <!-- ENDIF clinic.doctor_reg_cert -->
+                            <li class="card-list-item">
+                                <svg class="svg-icon svg-icon-gray" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                <span>{{clinic.phone}}</span>
+                            </li>
+                            <li class="card-list-item">
+                                <svg class="svg-icon svg-icon-gray" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                <span>{{clinic.email}}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <!-- Right Column: Patient Information -->
+            <div class="column column-right">
+                <div class="card">
+                    <div class="card-header">Patient Information</div>
+                    <div class="card-body">
+                        <table class="patient-table">
+                            <tr>
+                                <td class="patient-label">Patient ID</td>
+                                <td class="patient-separator">:</td>
+                                <td class="patient-value">{{patient.id}}</td>
+                            </tr>
+                            <tr>
+                                <td class="patient-label">Patient Name</td>
+                                <td class="patient-separator">:</td>
+                                <td class="patient-value">{{patient.name}}</td>
+                            </tr>
+                            <tr>
+                                <td class="patient-label">Age / Gender</td>
+                                <td class="patient-separator">:</td>
+                                <td class="patient-value">{{patient.age}} / {{patient.gender}}</td>
+                            </tr>
+                            <tr>
+                                <td class="patient-label">Phone</td>
+                                <td class="patient-separator">:</td>
+                                <td class="patient-value">{{patient.phone}}</td>
+                            </tr>
+                            <tr>
+                                <td class="patient-label">Address</td>
+                                <td class="patient-separator">:</td>
+                                <td class="patient-value">{{patient.address}}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Clinical Details Section -->
+        <div class="clinical-section">
+            <div class="clinical-header">Clinical Details</div>
+            <div class="clinical-body">
+                <!-- chief_complaint_row -->
+                <div class="clinical-row">
+                    <div class="clinical-row-left">
+                        <div class="clinical-row-left-content">
+                            <!-- Tooth icon -->
+                            <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 2C8.5 2 6 4.5 6 8C6 11.5 8 13.5 8 16C8 18.5 7.5 20.5 9 21.5C10.5 22.5 12 21 12 19C12 21 13.5 22.5 15 21.5C16.5 20.5 16 18.5 16 16C16 13.5 18 11.5 18 8C18 4.5 15.5 2 12 2 Z" /></svg>
+                            <span>Chief Complaint</span>
+                        </div>
+                    </div>
+                    <div class="clinical-row-separator">:</div>
+                    <div class="clinical-row-value">{{visit.chief_complaint}}</div>
+                </div>
+                <!-- /chief_complaint_row -->
+
+                <!-- clinical_findings_row -->
+                <div class="clinical-row">
+                    <div class="clinical-row-left">
+                        <div class="clinical-row-left-content">
+                            <!-- Search/Magnifier icon -->
+                            <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            <span>Clinical Findings</span>
+                        </div>
+                    </div>
+                    <div class="clinical-row-separator">:</div>
+                    <div class="clinical-row-value">{{visit.clinical_findings}}</div>
+                </div>
+                <!-- /clinical_findings_row -->
+
+                <!-- lab_investigation_row -->
+                <div class="clinical-row">
+                    <div class="clinical-row-left">
+                        <div class="clinical-row-left-content">
+                            <!-- Lab Flask icon -->
+                            <svg class="svg-icon" viewBox="0 0 24 24"><path d="M10 2v7.31L3.75 20a1 1 0 0 0 .85 1.5h14.8a1 1 0 0 0 .85-1.5L14 9.31V2M8.5 2h7M6 18h12"></path></svg>
+                            <span>Lab Investigation</span>
+                        </div>
+                    </div>
+                    <div class="clinical-row-separator">:</div>
+                    <div class="clinical-row-value">{{visit.lab_investigation}}</div>
+                </div>
+                <!-- /lab_investigation_row -->
+
+                <!-- treatment_advised_row -->
+                <div class="clinical-row">
+                    <div class="clinical-row-left">
+                        <div class="clinical-row-left-content">
+                            <!-- Clipboard Icon -->
+                            <svg class="svg-icon" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                            <span>Treatment Advised</span>
+                        </div>
+                    </div>
+                    <div class="clinical-row-separator">:</div>
+                    <div class="clinical-row-value">{{visit.treatment_advised}}</div>
+                </div>
+                <!-- /treatment_advised_row -->
+
+                <!-- treatment_done_row -->
+                <div class="clinical-row">
+                    <div class="clinical-row-left">
+                        <div class="clinical-row-left-content">
+                            <!-- Check Tooth Icon -->
+                            <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 2C8.5 2 6 4.5 6 8C6 11.5 8 13.5 8 16C8 18.5 7.5 20.5 9 21.5C10.5 22.5 12 21 12 19C12 21 13.5 22.5 15 21.5C16.5 20.5 16 18.5 16 16C16 13.5 18 11.5 18 8C18 4.5 15.5 2 12 2 Z" /><polyline points="9 10 11 12 15 8" stroke="#10b981" stroke-width="2" /></svg>
+                            <span>Treatment Done</span>
+                        </div>
+                    </div>
+                    <div class="clinical-row-separator">:</div>
+                    <div class="clinical-row-value">{{visit.treatment_done}}</div>
+                </div>
+                <!-- /treatment_done_row -->
+
+                <!-- medication_row -->
+                <div class="clinical-row">
+                    <div class="clinical-row-left">
+                        <div class="clinical-row-left-content">
+                            <!-- Pill Icon -->
+                            <svg class="svg-icon" viewBox="0 0 24 24"><line x1="4.5" y1="19.5" x2="19.5" y2="4.5"></line><path d="M15 3h6v6"></path><path d="M9 21H3v-6"></path><circle cx="8" cy="8" r="3"></circle><circle cx="16" cy="16" r="3"></circle></svg>
+                            <span>Medication</span>
+                        </div>
+                    </div>
+                    <div class="clinical-row-separator">:</div>
+                    <div class="clinical-row-value">{{visit.medication}}</div>
+                </div>
+                <!-- /medication_row -->
+
+                <!-- next_appointment_row -->
+                <div class="clinical-row">
+                    <div class="clinical-row-left">
+                        <div class="clinical-row-left-content">
+                            <!-- Calendar + Clock Icon -->
+                            <svg class="svg-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M12 14l2 2m0-2l-2 2"></path></svg>
+                            <span>Next Appointment</span>
+                        </div>
+                    </div>
+                    <div class="clinical-row-separator">:</div>
+                    <div class="clinical-row-value">{{visit.next_appointment}}</div>
+                </div>
+                <!-- /next_appointment_row -->
+
+                <!-- doctor_notes_row -->
+                <div class="clinical-row">
+                    <div class="clinical-row-left">
+                        <div class="clinical-row-left-content">
+                            <!-- Note Icon -->
+                            <svg class="svg-icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                            <span>Doctor Notes</span>
+                        </div>
+                    </div>
+                    <div class="clinical-row-separator">:</div>
+                    <div class="clinical-row-value">{{visit.doctor_notes}}</div>
+                </div>
+                <!-- /doctor_notes_row -->
+            </div>
+        </div>
+
+        <!-- 6. Payment Summary Section -->
+        <div class="payment-section">
+            <div class="payment-header">Payment Summary</div>
+            <div class="payment-body">
+                <div class="payment-total-container">
+                    <span class="payment-total-label">Total Amount</span>
+                    <span class="payment-total-value">₹ {{payment.total_amount}}</span>
+                </div>
+                <div class="payment-date-container">
+                    <!-- Calendar icon -->
+                    <svg class="svg-icon svg-icon-gray" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    <span class="payment-date-label">Payment Date</span>
+                    <span>:</span>
+                    <span>{{payment.payment_date}}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. Terms & Conditions Section -->
+        <!-- terms_section -->
+        <div class="terms-section">
+            <div class="terms-header">Terms & Conditions</div>
+            <div class="terms-body">
+                <ul class="terms-list">
+                    {{terms}}
+                </ul>
+            </div>
+        </div>
+        <!-- /terms_section -->
+
+        <!-- 8. Footer Section -->
+        <div class="footer-container">
+            <div class="footer-line"></div>
+            <div class="footer-text">★ Thank You For Visiting ★</div>
+            <div class="footer-line"></div>
+        </div>
+    </div>
+</body>
+</html>

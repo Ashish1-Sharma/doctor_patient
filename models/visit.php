@@ -267,4 +267,29 @@ public function getVisitById($parentId, $visitId)
 
     return $stmt;
 }
+
+    /**
+     * Delete Visit and associated records
+     */
+    public function deleteVisit($id, $parentId)
+    {
+        try {
+            // Delete associated payments
+            $paymentQuery = "DELETE FROM payments WHERE visit_id = ? AND parentId = ?";
+            $paymentStmt = $this->connection->prepare($paymentQuery);
+            $paymentStmt->execute([$id, $parentId]);
+
+            // Delete associated appointments
+            $appointmentQuery = "DELETE FROM appointments WHERE visit_id = ?";
+            $appointmentStmt = $this->connection->prepare($appointmentQuery);
+            $appointmentStmt->execute([$id]);
+
+            // Delete the visit
+            $query = "DELETE FROM {$this->table} WHERE id = ? AND parentId = ?";
+            $stmt = $this->connection->prepare($query);
+            return $stmt->execute([$id, $parentId]);
+        } catch (PDOException $e) {
+            throw new Exception("Error deleting visit: " . $e->getMessage());
+        }
+    }
 }

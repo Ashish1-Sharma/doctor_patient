@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/payment_model.dart';
 import '../models/patient_model.dart';
-import '../services/patient_service.dart';
 import '../services/payment_service.dart';
+import '../services/patient_service.dart';
 import '../theme/app_theme.dart';
+import 'patient_visit_report_screen.dart';
 
 /// Screen listing all invoices sorted by updatedAt, allowing doctors to update status and paid amounts.
 class PaymentsScreen extends StatefulWidget {
@@ -20,6 +21,42 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   List<PaymentModel> _payments = [];
   List<PatientModel> _patients = [];
   int _parentId = 1;
+  DateTimeRange? _selectedDateRange;
+
+  String _formatDate(DateTime date) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  Future<void> _pickDateRange(BuildContext context) async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: _selectedDateRange ?? DateTimeRange(
+        start: DateTime.now().subtract(const Duration(days: 7)),
+        end: DateTime.now().add(const Duration(days: 7)),
+      ),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.tealAccent,
+              onPrimary: Colors.white,
+              onSurface: AppTheme.primarySlate,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedDateRange = picked;
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -212,32 +249,21 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     );
   }
 
-  void _showMockDownload(PaymentModel payment) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.info_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Invoice PDF Downloaded', style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text('Receipt ${payment.invoiceNo}.pdf saved to device Downloads.', style: const TextStyle(fontSize: 12)),
-                ],
-              ),
-            ),
-          ],
+  void _viewPrintReport(PaymentModel payment) {
+    // PatientVisitReportScreen fetches visit + patient + clinic + payment
+    // itself via the consolidated getVisitReportDetails API, so no
+    // pre-fetch is needed here — just hand off the identifiers.
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PatientVisitReportScreen(
+          parentId: payment.parentId,
+          visitId: payment.visitId,
         ),
-        backgroundColor: AppTheme.primarySlate,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
+
 
   Color _getStatusColor(String status) {
     switch (status.trim().toLowerCase()) {
@@ -254,6 +280,20 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
+    final filteredPayments = _selectedDateRange == null
+        ? _payments
+        : _payments.where((payment) {
+            try {
+              final pDate = DateTime.parse(payment.paymentDate);
+              final dateOnly = DateTime(pDate.year, pDate.month, pDate.day);
+              final startOnly = DateTime(_selectedDateRange!.start.year, _selectedDateRange!.start.month, _selectedDateRange!.start.day);
+              final endOnly = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day);
+              return !dateOnly.isBefore(startOnly) && !dateOnly.isAfter(endOnly);
+            } catch (_) {
+              return true;
+            }
+          }).toList();
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -261,170 +301,228 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: AppTheme.primarySlate,
+        actions: [
+          IconButton(
+            icon: Icon(
+              _selectedDateRange != null ? Icons.date_range : Icons.date_range_outlined,
+              color: _selectedDateRange != null ? AppTheme.tealAccent : null,
+            ),
+            tooltip: 'Filter by Date Range',
+            onPressed: () => _pickDateRange(context),
+          ),
+        ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppTheme.tealAccent))
-          : _payments.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.receipt_long_outlined, size: 64, color: AppTheme.secondarySlate.withValues(alpha: 0.3)),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'No invoices recorded yet.',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.secondarySlate),
-                      ),
-                    ],
+      body: Column(
+        children: [
+          if (_selectedDateRange != null)
+            Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.filter_alt_outlined, size: 16, color: AppTheme.tealAccent),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Range: ${_formatDate(_selectedDateRange!.start)} - ${_formatDate(_selectedDateRange!.end)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primarySlate),
                   ),
-                )
-              : RefreshIndicator(
-                  color: AppTheme.tealAccent,
-                  onRefresh: _loadData,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(20),
-                    itemCount: _payments.length,
-                    itemBuilder: (context, index) {
-                      final payment = _payments[index];
-                      final patient = _getPatient(payment.patientId);
-                      final patientName = patient?.fullName ?? 'Unknown Patient';
-                      final patientCode = patient?.patientCode ?? 'N/A';
-                      final statusColor = _getStatusColor(payment.paymentStatus);
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
-                        ),
-                        color: Colors.white,
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      patientName,
-                                      style: textTheme.titleMedium?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                        color: AppTheme.primarySlate,
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: statusColor.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      payment.paymentStatus.toUpperCase(),
-                                      style: TextStyle(
-                                        color: statusColor,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Code: $patientCode • Invoice: ${payment.invoiceNo}',
-                                style: textTheme.bodySmall?.copyWith(color: AppTheme.secondarySlate),
-                              ),
-                              const Divider(height: 24, color: Color(0xFFF1F5F9)),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text('Total Cost', style: TextStyle(color: AppTheme.secondarySlate, fontSize: 11)),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '₹${payment.totalAmount.toStringAsFixed(2)}',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primarySlate, fontSize: 15),
-                                      ),
-                                    ],
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text('Paid Deposit', style: TextStyle(color: AppTheme.secondarySlate, fontSize: 11)),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '₹${payment.paidAmount.toStringAsFixed(2)}',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.emeraldSuccess, fontSize: 15),
-                                      ),
-                                    ],
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text('Pending Bal.', style: TextStyle(color: AppTheme.secondarySlate, fontSize: 11)),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '₹${payment.pendingAmount.toStringAsFixed(2)}',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: payment.pendingAmount > 0 ? AppTheme.amberWarning : AppTheme.emeraldSuccess,
-                                          fontSize: 15,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              const Divider(height: 24, color: Color(0xFFF1F5F9)),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'Updated: ${payment.updatedAt}',
-                                      style: const TextStyle(fontSize: 11, color: AppTheme.secondarySlate),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Row(
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.file_download_outlined, color: AppTheme.primarySlate),
-                                        onPressed: () => _showMockDownload(payment),
-                                        tooltip: 'Download Invoice',
-                                      ),
-                                      const SizedBox(width: 8),
-                                      ElevatedButton.icon(
-                                        onPressed: () => _showEditPaymentSheet(payment),
-                                        icon: const Icon(Icons.edit, size: 14),
-                                        label: const Text('Update Status', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppTheme.tealAccent.withValues(alpha: 0.12),
-                                          foregroundColor: AppTheme.tealAccent,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                          elevation: 0,
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedDateRange = null;
+                      });
                     },
+                    child: const Icon(Icons.cancel, size: 18, color: AppTheme.secondarySlate),
                   ),
-                ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: AppTheme.tealAccent))
+                : filteredPayments.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.receipt_long_outlined, size: 64, color: AppTheme.secondarySlate.withValues(alpha: 0.3)),
+                            const SizedBox(height: 16),
+                            Text(
+                              _selectedDateRange != null
+                                  ? 'No invoices recorded in this range.'
+                                  : 'No invoices recorded yet.',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.secondarySlate),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        color: AppTheme.tealAccent,
+                        onRefresh: _loadData,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(20),
+                          itemCount: filteredPayments.length,
+                          itemBuilder: (context, index) {
+                            final payment = filteredPayments[index];
+                            final patient = _getPatient(payment.patientId);
+                            final patientName = patient?.fullName ?? 'Unknown Patient';
+                            final patientCode = patient?.patientCode ?? 'N/A';
+                            final statusColor = _getStatusColor(payment.paymentStatus);
+
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
+                              ),
+                              color: Colors.white,
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            patientName,
+                                            style: textTheme.titleMedium?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.primarySlate,
+                                            ),
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: statusColor.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            payment.paymentStatus.toUpperCase(),
+                                            style: TextStyle(
+                                              color: statusColor,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Code: $patientCode • Invoice: ${payment.invoiceNo}',
+                                      style: textTheme.bodySmall?.copyWith(color: AppTheme.secondarySlate),
+                                    ),
+                                    if (payment.discount > 0) ...[
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          const Text('Subtotal: ', style: TextStyle(color: AppTheme.secondarySlate, fontSize: 11)),
+                                          Text('₹${payment.subtotal.toStringAsFixed(2)}', style: const TextStyle(color: AppTheme.primarySlate, fontWeight: FontWeight.w600, fontSize: 11)),
+                                          const SizedBox(width: 12),
+                                          const Text('Discount: ', style: TextStyle(color: AppTheme.secondarySlate, fontSize: 11)),
+                                          Text('-₹${payment.discount.toStringAsFixed(2)}', style: const TextStyle(color: AppTheme.redDestructive, fontWeight: FontWeight.bold, fontSize: 11)),
+                                        ],
+                                      ),
+                                    ],
+                                    const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text('Total Cost', style: TextStyle(color: AppTheme.secondarySlate, fontSize: 11)),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '₹${payment.totalAmount.toStringAsFixed(2)}',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primarySlate, fontSize: 15),
+                                            ),
+                                          ],
+                                        ),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text('Paid Deposit', style: TextStyle(color: AppTheme.secondarySlate, fontSize: 11)),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '₹${payment.paidAmount.toStringAsFixed(2)}',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.emeraldSuccess, fontSize: 15),
+                                            ),
+                                          ],
+                                        ),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text('Pending Bal.', style: TextStyle(color: AppTheme.secondarySlate, fontSize: 11)),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '₹${payment.pendingAmount.toStringAsFixed(2)}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: payment.pendingAmount > 0 ? AppTheme.amberWarning : AppTheme.emeraldSuccess,
+                                                fontSize: 15,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    const Divider(height: 24, color: Color(0xFFF1F5F9)),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            'Updated: ${payment.updatedAt}',
+                                            style: const TextStyle(fontSize: 11, color: AppTheme.secondarySlate),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Row(
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(Icons.file_download_outlined, color: AppTheme.primarySlate),
+                                              onPressed: () => _viewPrintReport(payment),
+                                              tooltip: 'Download Invoice',
+                                            ),
+
+                                            const SizedBox(width: 8),
+                                            ElevatedButton.icon(
+                                              onPressed: () => _showEditPaymentSheet(payment),
+                                              icon: const Icon(Icons.edit, size: 14),
+                                              label: const Text('Update Status', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: AppTheme.tealAccent.withValues(alpha: 0.12),
+                                                foregroundColor: AppTheme.tealAccent,
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                elevation: 0,
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -13,10 +13,13 @@ class PaymentStep extends StatefulWidget {
 
 class _PaymentStepState extends State<PaymentStep> {
   final _formKey = GlobalKey<FormState>();
-  final _totalController = TextEditingController();
+  final _subtotalController = TextEditingController();
+  final _discountController = TextEditingController();
   final _paidController = TextEditingController();
   String _paymentMethod = 'UPI';
 
+  double _subtotal = 0.0;
+  double _discount = 0.0;
   double _total = 0.0;
   double _paid = 0.0;
 
@@ -26,16 +29,20 @@ class _PaymentStepState extends State<PaymentStep> {
     // Load existing form state from VisitProvider
     final provider = Provider.of<VisitProvider>(context, listen: false);
     _paymentMethod = provider.payment.paymentMethod.isEmpty ? 'UPI' : provider.payment.paymentMethod;
+    _subtotal = provider.payment.subtotal;
+    _discount = provider.payment.discount;
     _total = provider.payment.totalAmount;
     _paid = provider.payment.paidAmount;
 
-    if (_total > 0) _totalController.text = _total.toStringAsFixed(0);
+    if (_subtotal > 0) _subtotalController.text = _subtotal.toStringAsFixed(0);
+    if (_discount > 0) _discountController.text = _discount.toStringAsFixed(0);
     if (_paid > 0) _paidController.text = _paid.toStringAsFixed(0);
   }
 
   @override
   void dispose() {
-    _totalController.dispose();
+    _subtotalController.dispose();
+    _discountController.dispose();
     _paidController.dispose();
     super.dispose();
   }
@@ -44,6 +51,8 @@ class _PaymentStepState extends State<PaymentStep> {
     if (_formKey.currentState!.validate()) {
       final provider = Provider.of<VisitProvider>(context, listen: false);
       provider.updatePayment(
+        subtotal: _subtotal,
+        discount: _discount,
         total: _total,
         paid: _paid,
         method: _paymentMethod,
@@ -136,21 +145,22 @@ class _PaymentStepState extends State<PaymentStep> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Total Amount Input
+                  // Subtotal Amount Input
                   Row(
                     children: [
-                      Text('Total Amount', style: textTheme.labelLarge),
+                      Text('Subtotal (Procedure Charges)', style: textTheme.labelLarge),
                       const SizedBox(width: 4),
                       const Text('*', style: TextStyle(color: AppTheme.redDestructive, fontWeight: FontWeight.bold)),
                     ],
                   ),
                   const SizedBox(height: 8),
                   TextFormField(
-                    controller: _totalController,
+                    controller: _subtotalController,
                     keyboardType: TextInputType.number,
                     onChanged: (val) {
                       setState(() {
-                        _total = double.tryParse(val.trim()) ?? 0.0;
+                        _subtotal = double.tryParse(val.trim()) ?? 0.0;
+                        _total = _subtotal - _discount;
                       });
                       _syncToProvider();
                     },
@@ -162,13 +172,75 @@ class _PaymentStepState extends State<PaymentStep> {
                       ),
                     ),
                     validator: (val) {
-                      if (val == null || val.trim().isEmpty) return 'Total amount is mandatory';
+                      if (val == null || val.trim().isEmpty) return 'Subtotal is mandatory';
                       final parsed = double.tryParse(val.trim());
                       if (parsed == null || parsed <= 0) return 'Enter a valid amount';
                       return null;
                     },
                   ),
                   const SizedBox(height: 20),
+
+                  // Discount Input
+                  Text('Discount (Optional)', style: textTheme.labelLarge),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _discountController,
+                    keyboardType: TextInputType.number,
+                    onChanged: (val) {
+                      setState(() {
+                        _discount = double.tryParse(val.trim()) ?? 0.0;
+                        _total = _subtotal - _discount;
+                      });
+                      _syncToProvider();
+                    },
+                    decoration: const InputDecoration(
+                      hintText: '0.00',
+                      prefixIcon: Center(
+                        widthFactor: 1.0,
+                        child: Text('₹ ', style: TextStyle(color: AppTheme.secondarySlate, fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    validator: (val) {
+                      if (val != null && val.trim().isNotEmpty) {
+                        final parsed = double.tryParse(val.trim());
+                        if (parsed == null || parsed < 0) return 'Enter a valid discount';
+                        if (parsed > _subtotal) return 'Discount cannot exceed subtotal';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Total Bill Box (Calculated)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.tealAccent.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.tealAccent.withValues(alpha: 0.15)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Total Cost (Subtotal - Discount)',
+                          style: TextStyle(
+                            color: AppTheme.primarySlate,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          '₹${(_total < 0 ? 0.0 : _total).toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.tealAccent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
                   // Paid Amount Input
                   Text('Paid Amount', style: textTheme.labelLarge),

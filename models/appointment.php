@@ -73,4 +73,31 @@ class Appointment
             throw new Exception("Error fetching appointments: " . $e->getMessage());
         }
     }
+
+    /**
+     * Update Appointment details (rescheduling)
+     */
+    public function update($id, $params)
+    {
+        try {
+            $query = "UPDATE {$this->table}
+                      SET
+                          appointment_date = :appointmentDate,
+                          procedure_text = :procedureText,
+                          status = :status
+                      WHERE id = :id";
+
+            $stmt = $this->connection->prepare($query);
+
+            $stmt->bindValue(":appointmentDate", $params["appointmentDate"]);
+            $stmt->bindValue(":procedureText", $params["procedureText"]);
+            $stmt->bindValue(":status", $params["status"]);
+            $stmt->bindValue(":id", $id, PDO::PARAM_INT);
+
+            return $stmt->execute();
+        } catch (PDOException $e) {
+            throw new Exception("Error updating appointment: " . $e->getMessage());
+        }
+    }
 }
+

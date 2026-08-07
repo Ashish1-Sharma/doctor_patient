@@ -132,16 +132,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           padding: const EdgeInsets.all(24.0),
                           child: Column(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.tealAccent.withValues(alpha: 0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.medical_services_outlined,
-                                  color: AppTheme.tealAccent,
-                                  size: 48,
+                              CircleAvatar(
+                                radius: 42,
+                                backgroundImage: AssetImage(
+                                  'assets/doctor.jpeg',
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -275,7 +269,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         ),
                                         const SizedBox(height: 4),
                                         const Text(
-                                          'Configure clinic name, address, GST, and terms.',
+                                          'Configure clinic details, registration, and terms.',
                                           style: TextStyle(color: AppTheme.secondarySlate, fontSize: 12),
                                         ),
                                       ],

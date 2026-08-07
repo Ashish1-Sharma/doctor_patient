@@ -16,8 +16,11 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
-  final _gstController = TextEditingController();
-  final _dlController = TextEditingController();
+  final _clinicRegController = TextEditingController();
+  final _pollutionCertController = TextEditingController();
+  final _tradeLicenseController = TextEditingController();
+  final _municipalityNocController = TextEditingController();
+  final _doctorRegCertController = TextEditingController();
   final _termsController = TextEditingController();
 
   bool _isLoading = true;
@@ -35,8 +38,11 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
   void dispose() {
     _nameController.dispose();
     _addressController.dispose();
-    _gstController.dispose();
-    _dlController.dispose();
+    _clinicRegController.dispose();
+    _pollutionCertController.dispose();
+    _tradeLicenseController.dispose();
+    _municipalityNocController.dispose();
+    _doctorRegCertController.dispose();
     _termsController.dispose();
     super.dispose();
   }
@@ -76,8 +82,11 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
               _existingCompanyId = companyData['id'] is int ? companyData['id'] : int.tryParse(companyData['id'].toString());
               _nameController.text = companyData['companyName'] ?? '';
               _addressController.text = companyData['companyAddress'] ?? '';
-              _gstController.text = companyData['gst'] ?? '';
-              _dlController.text = companyData['dlNo'] ?? '';
+              _clinicRegController.text = companyData['clinic_reg_no'] ?? '';
+              _pollutionCertController.text = companyData['pollution_control_cert'] ?? '';
+              _tradeLicenseController.text = companyData['trade_license'] ?? '';
+              _municipalityNocController.text = companyData['municipality_noc'] ?? '';
+              _doctorRegCertController.text = companyData['doctor_reg_cert'] ?? '';
               _termsController.text = companyData['terms'] ?? '';
             });
           }
@@ -98,8 +107,11 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
       'userId': _doctorId,
       'companyName': _nameController.text.trim(),
       'companyAddress': _addressController.text.trim(),
-      'gst': _gstController.text.trim().isEmpty ? null : _gstController.text.trim(),
-      'dlNo': _dlController.text.trim().isEmpty ? null : _dlController.text.trim(),
+      'clinic_reg_no': _clinicRegController.text.trim().isEmpty ? null : _clinicRegController.text.trim(),
+      'pollution_control_cert': _pollutionCertController.text.trim().isEmpty ? null : _pollutionCertController.text.trim(),
+      'trade_license': _tradeLicenseController.text.trim().isEmpty ? null : _tradeLicenseController.text.trim(),
+      'municipality_noc': _municipalityNocController.text.trim().isEmpty ? null : _municipalityNocController.text.trim(),
+      'doctor_reg_cert': _doctorRegCertController.text.trim().isEmpty ? null : _doctorRegCertController.text.trim(),
       'terms': _termsController.text.trim().isEmpty ? null : _termsController.text.trim(),
     };
 
@@ -207,18 +219,42 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
                             ),
                             const SizedBox(height: 20),
                             TextFormField(
-                              controller: _gstController,
+                              controller: _clinicRegController,
                               decoration: const InputDecoration(
-                                labelText: 'GSTIN Number (Optional)',
-                                hintText: 'e.g. 22AAAAA0000A1Z5',
+                                labelText: 'Clinic Registration Number (Optional)',
+                                hintText: 'Enter clinic registration number',
                               ),
                             ),
                             const SizedBox(height: 20),
                             TextFormField(
-                              controller: _dlController,
+                              controller: _pollutionCertController,
                               decoration: const InputDecoration(
-                                labelText: 'Drug License (DL) Number (Optional)',
-                                hintText: 'e.g. DL-12345/A',
+                                labelText: 'Pollution Control Certificate Number (Optional)',
+                                hintText: 'Enter pollution control certificate details',
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _tradeLicenseController,
+                              decoration: const InputDecoration(
+                                labelText: 'Trade License Number (Optional)',
+                                hintText: 'Enter trade license number',
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _municipalityNocController,
+                              decoration: const InputDecoration(
+                                labelText: 'Municipality NOC Number (Optional)',
+                                hintText: 'Enter municipality NOC number',
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _doctorRegCertController,
+                              decoration: const InputDecoration(
+                                labelText: 'Doctor Registration Certificate (Optional)',
+                                hintText: 'Enter doctor registration certificate number',
                               ),
                             ),
                             const SizedBox(height: 20),

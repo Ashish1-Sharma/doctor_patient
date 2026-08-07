@@ -50,8 +50,11 @@ if (isset($data)) {
         "userId" => $data->userId,
         "companyName" => $data->companyName,
         "companyAddress" => $data->companyAddress,
-        "gst" => isset($data->gst) && !empty($data->gst) ? $data->gst : null,
-        "dlNo" => isset($data->dlNo) && !empty($data->dlNo) ? $data->dlNo : null,
+        "clinic_reg_no" => isset($data->clinic_reg_no) && !empty($data->clinic_reg_no) ? $data->clinic_reg_no : null,
+        "pollution_control_cert" => isset($data->pollution_control_cert) && !empty($data->pollution_control_cert) ? $data->pollution_control_cert : null,
+        "trade_license" => isset($data->trade_license) && !empty($data->trade_license) ? $data->trade_license : null,
+        "municipality_noc" => isset($data->municipality_noc) && !empty($data->municipality_noc) ? $data->municipality_noc : null,
+        "doctor_reg_cert" => isset($data->doctor_reg_cert) && !empty($data->doctor_reg_cert) ? $data->doctor_reg_cert : null,
         "terms" => isset($data->terms) && !empty($data->terms) ? $data->terms : null
     ];
 

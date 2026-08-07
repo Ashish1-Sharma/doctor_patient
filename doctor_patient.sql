@@ -117,4 +117,52 @@ CREATE TABLE `visits` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
--- 2026-08-03 18:02:03 UTC
+DROP TABLE IF EXISTS `company`;
+CREATE TABLE `company` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `userId` int NOT NULL,
+  `companyName` varchar(255) NOT NULL,
+  `companyAddress` text NOT NULL,
+  `clinic_reg_no` varchar(150) DEFAULT NULL,
+  `pollution_control_cert` varchar(150) DEFAULT NULL,
+  `trade_license` varchar(150) DEFAULT NULL,
+  `municipality_noc` varchar(150) DEFAULT NULL,
+  `doctor_reg_cert` varchar(150) DEFAULT NULL,
+  `terms` text,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_userId` (`userId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+DROP TABLE IF EXISTS `appointments`;
+CREATE TABLE `appointments` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `visit_id` int DEFAULT NULL,
+  `patient_id` int NOT NULL,
+  `doctor_id` int NOT NULL,
+  `appointment_date` datetime NOT NULL,
+  `procedure_text` text,
+  `status` varchar(50) DEFAULT 'Pending',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_patient` (`patient_id`),
+  KEY `idx_doctor` (`doctor_id`),
+  KEY `idx_visit` (`visit_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+-- -------------------------------------------------------------
+-- MIGRATION ALTER SQL FOR EXISTING DATABASES:
+-- Execute the following command on production database if upgrading:
+-- -------------------------------------------------------------
+--ALTER TABLE `company` DROP COLUMN `gst`;
+--ALTER TABLE `company` CHANGE COLUMN `dlNo` `clinic_reg_no` varchar(150) DEFAULT NULL;
+--ALTER TABLE `company` ADD COLUMN `pollution_control_cert` varchar(150) DEFAULT NULL AFTER `clinic_reg_no`;
+--ALTER TABLE `company` ADD COLUMN `trade_license` varchar(150) DEFAULT NULL AFTER `pollution_control_cert`;
+--ALTER TABLE `company` ADD COLUMN `municipality_noc` varchar(150) DEFAULT NULL AFTER `trade_license`;
+--ALTER TABLE `company` ADD COLUMN `doctor_reg_cert` varchar(150) DEFAULT NULL AFTER `municipality_noc`;
+-- -------------------------------------------------------------
+
