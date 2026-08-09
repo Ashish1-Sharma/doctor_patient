@@ -246,7 +246,7 @@ class _ManageDoctorsScreenState extends State<ManageDoctorsScreen> {
                               
                               final responseData = jsonDecode(response.body);
                               
-                              if (response.statusCode == 201 || responseData['statusCode'] == 201) {
+                              if ((response.statusCode == 200 || response.statusCode == 201) && responseData['statusCode'] == 201) {
                                 if (context.mounted) {
                                   Navigator.pop(ctx);
                                   _showNotification('Doctor created successfully!', AppTheme.emeraldSuccess, Icons.check_circle_outline);
@@ -294,7 +294,7 @@ class _ManageDoctorsScreenState extends State<ManageDoctorsScreen> {
     final nameController = TextEditingController(text: doc['userName'] ?? doc['name'] ?? '');
     final emailController = TextEditingController(text: doc['userEmail'] ?? '');
     final mobileController = TextEditingController(text: doc['userMobile'] ?? '');
-    final passwordController = TextEditingController();
+    final passwordController = TextEditingController(text: doc['password']?.toString() ?? '');
     bool isSaving = false;
 
     showModalBottomSheet(
@@ -370,13 +370,22 @@ class _ManageDoctorsScreenState extends State<ManageDoctorsScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Password Field (Optional on Edit)
-                  const Text('New Password (Optional)', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                  // Password Field
+                  const Text('Password', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: passwordController,
-                    decoration: const InputDecoration(hintText: 'Leave blank to keep existing password'),
+                    decoration: const InputDecoration(hintText: 'Enter password'),
                     obscureText: true,
+                    validator: (val) {
+                      if (val == null || val.isEmpty) {
+                        return 'Enter password';
+                      }
+                      if (val.length < 6) {
+                        return 'Password must be at least 6 characters';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 32),
 
@@ -415,7 +424,7 @@ class _ManageDoctorsScreenState extends State<ManageDoctorsScreen> {
                               
                               final responseData = jsonDecode(response.body);
                               
-                              if (response.statusCode == 200 || responseData['statusCode'] == 200) {
+                              if (response.statusCode == 200 && responseData['statusCode'] == 200) {
                                 if (context.mounted) {
                                   Navigator.pop(ctx);
                                   _showNotification('Doctor details updated successfully!', AppTheme.emeraldSuccess, Icons.check_circle_outline);

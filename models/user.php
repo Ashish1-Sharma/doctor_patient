@@ -74,10 +74,29 @@ public function updateEmail($currentEmail, $newEmail)
     }
 }
 
+public function getUserById($id)
+{
+    try {
+        $query = 'SELECT * FROM ' . $this->table . ' WHERE id = ? LIMIT 0,1';
+        $stmt = $this->connection->prepare($query);
+        $stmt->execute([$id]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        throw new Exception('Error fetching user by ID: ' . $e->getMessage());
+    }
+}
 
 public function updateUser($id, $userName, $userEmail, $userMobile, $country, $password = null)
 {
     try {
+        // Check if the new email or mobile number is already in use by another user
+        $checkQuery = 'SELECT id FROM ' . $this->table . ' WHERE (userEmail = ? OR userMobile = ?) AND id != ? LIMIT 1';
+        $checkStmt = $this->connection->prepare($checkQuery);
+        $checkStmt->execute([$userEmail, $userMobile, $id]);
+        if ($checkStmt->fetch(PDO::FETCH_ASSOC)) {
+            return ['success' => false, 'message' => 'Email or mobile number is already in use by another account'];
+        }
+
         // Start building the query
         $query = 'UPDATE ' . $this->table . ' SET userName = ?, userEmail = ?, userMobile = ?, country = ?';
 
@@ -85,7 +104,7 @@ public function updateUser($id, $userName, $userEmail, $userMobile, $country, $p
         $params = [$userName, $userEmail, $userMobile, $country];
         if ($password !== null) {
             $query .= ', password = ?';
-            $params[] = $password; // Hash the password
+            $params[] = $password;
         }
 
         $query .= ' WHERE id = ?';
@@ -95,11 +114,7 @@ public function updateUser($id, $userName, $userEmail, $userMobile, $country, $p
         $stmt = $this->connection->prepare($query);
         $stmt->execute($params);
 
-        if ($stmt->rowCount() > 0) {
-            return ['success' => true, 'message' => 'User updated successfully'];
-        } else {
-            return ['success' => false, 'message' => 'No changes made or user not found'];
-        }
+        return ['success' => true, 'message' => 'User updated successfully'];
     } catch (PDOException $e) {
         throw new Exception('Error updating user: ' . $e->getMessage());
     }
@@ -323,6 +338,7 @@ public function getUsersByParentId($params)
                     userEmail,
                     userMobile,
                     country,
+                    password,
                     parentId,
                     status,
                     reg_date,

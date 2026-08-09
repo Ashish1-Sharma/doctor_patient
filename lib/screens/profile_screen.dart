@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
+import '../services/auth_service.dart';
 import 'login_screen.dart';
 import 'company_details_screen.dart';
 
@@ -42,6 +43,289 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  void _showNotification(String message, Color bgColor, IconData icon) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: bgColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  void _openEditProfileDialog() {
+    if (_profileData == null) return;
+
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController(text: _profileData!['userName'] ?? '');
+    final emailController = TextEditingController(text: _profileData!['userEmail'] ?? '');
+    final mobileController = TextEditingController(text: _profileData!['userMobile'] ?? '');
+    final countryController = TextEditingController(text: _profileData!['country'] ?? 'India');
+    final passwordController = TextEditingController(text: _profileData!['password'] ?? '');
+    bool isSaving = false;
+    bool isPasswordObscure = true;
+    String? errorMessage;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            top: 24,
+            left: 24,
+            right: 24,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+          ),
+          child: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Edit Profile Details',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primarySlate,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
+                  
+                  // Name Field
+                  const Text('Name', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter name',
+                      prefixIcon: Icon(Icons.person_outline, color: AppTheme.secondarySlate),
+                    ),
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter name' : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Email Field
+                  const Text('Email Address', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: emailController,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter email address',
+                      prefixIcon: Icon(Icons.email_outlined, color: AppTheme.secondarySlate),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (val) {
+                      if (val == null || val.trim().isEmpty) return 'Enter email';
+                      final regex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
+                      if (!regex.hasMatch(val.trim())) {
+                        return 'Enter a valid email address';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Mobile Field
+                  const Text('Mobile Number', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: mobileController,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter mobile number',
+                      prefixIcon: Icon(Icons.phone_android_outlined, color: AppTheme.secondarySlate),
+                    ),
+                    keyboardType: TextInputType.phone,
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter mobile number' : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Country Field
+                  const Text('Country', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: countryController,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter country',
+                      prefixIcon: Icon(Icons.public_outlined, color: AppTheme.secondarySlate),
+                    ),
+                    validator: (val) => val == null || val.trim().isEmpty ? 'Enter country' : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Password Field
+                  const Text('Password', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: passwordController,
+                    decoration: InputDecoration(
+                      hintText: 'Enter password',
+                      prefixIcon: const Icon(Icons.lock_outline, color: AppTheme.secondarySlate),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          isPasswordObscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                          color: AppTheme.secondarySlate,
+                        ),
+                        onPressed: () {
+                          setModalState(() {
+                            isPasswordObscure = !isPasswordObscure;
+                          });
+                        },
+                      ),
+                    ),
+                    obscureText: isPasswordObscure,
+                    validator: (val) {
+                      if (val == null || val.isEmpty) {
+                        return 'Enter password';
+                      }
+                      if (val.length < 6) {
+                        return 'Password must be at least 6 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Inline Error Alert Box (renders inside the bottom sheet context)
+                  if (errorMessage != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.redDestructive.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.redDestructive.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: AppTheme.redDestructive, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              errorMessage!,
+                              style: const TextStyle(
+                                color: AppTheme.redDestructive,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Submit Button
+                  ElevatedButton(
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            if (!formKey.currentState!.validate()) return;
+                            
+                            setModalState(() {
+                              isSaving = true;
+                              errorMessage = null; // Clear previous errors on retry
+                            });
+
+                            final Map<String, dynamic> payload = {
+                              "id": _profileData!['id'],
+                              "name": nameController.text.trim(),
+                              "email": emailController.text.trim(),
+                              "mobile": mobileController.text.trim(),
+                              "country": countryController.text.trim(),
+                              "password": passwordController.text.trim(),
+                            };
+
+                            try {
+                              final response = await AuthService.updateUser(payload)
+                                  .timeout(const Duration(seconds: 5));
+                              
+                              final responseData = jsonDecode(response.body);
+                              
+                              if (response.statusCode == 200 && responseData['statusCode'] == 200) {
+                                final updatedBody = responseData['body'];
+                                if (updatedBody != null) {
+                                  final prefs = await SharedPreferences.getInstance();
+                                  await prefs.setString('user_profile', jsonEncode(updatedBody));
+                                }
+
+                                if (context.mounted) {
+                                  Navigator.pop(ctx);
+                                  _showNotification(
+                                    'Profile updated successfully!',
+                                    AppTheme.emeraldSuccess,
+                                    Icons.check_circle_outline,
+                                  );
+                                  _loadProfile();
+                                }
+                              } else {
+                                setModalState(() {
+                                  isSaving = false;
+                                  errorMessage = responseData['message'] ?? 'Failed to update profile.';
+                                });
+                              }
+                            } catch (_) {
+                              setModalState(() {
+                                isSaving = false;
+                                errorMessage = 'Network connection failed.';
+                              });
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.tealAccent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    child: isSaving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Save Changes',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _logout() async {
@@ -89,6 +373,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final bool isAdmin = _profileData != null && _profileData!['isSubUser'] != true;
 
     return Scaffold(
       appBar: AppBar(
@@ -97,6 +382,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: AppTheme.primarySlate,
+        actions: isAdmin
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: 'Edit Profile',
+                  onPressed: _openEditProfileDialog,
+                ),
+              ]
+            : null,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppTheme.tealAccent))

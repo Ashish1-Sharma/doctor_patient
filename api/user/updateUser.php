@@ -39,14 +39,34 @@ function sendResponse($statusCode, $message, $body = null)
 
 if (isset($data)) {
   try {
-        $password = isset($data->password) ? $data->password : null; // Check if password is provided
+        $password = (isset($data->password) && trim($data->password) !== '') ? $data->password : null; // Check if password is provided
 
         $userResult = $user->updateUser($data->id, $data->name, $data->email, $data->mobile, $data->country, $password);
 
         if ($userResult['success']) {
-            sendResponse(200, $userResult['message']);
+            $updatedUser = $user->getUserById($data->id);
+            if ($updatedUser) {
+                $responseBody = [
+                    'id' => $updatedUser['id'],
+                    'userEmail' => $updatedUser['userEmail'],
+                    'country' => $updatedUser['country'] ?? null,
+                    'userName' => $updatedUser['userName'],
+                    'userMobile' => $updatedUser['userMobile'],
+                    'reg_date' => $updatedUser['reg_date'],
+                    'password' => $updatedUser['password'],
+                    'validity' => $updatedUser['validity'],
+                    'purchase_date' => $updatedUser['purchase_date'],
+                    'purchase_id' => $updatedUser['purchase_id'],
+                    'parentId' => $updatedUser['parentId'],
+                    'access_key' => $updatedUser['access_key'],
+                    'flag' => $updatedUser['flag']
+                ];
+                sendResponse(200, $userResult['message'], $responseBody);
+            } else {
+                sendResponse(200, $userResult['message']);
+            }
         } else {
-            sendResponse(401, $userResult['message']);
+            sendResponse(400, $userResult['message']);
         }
     } catch (Exception $e) {
         sendResponse(500, 'Error updating user', ['error' => $e->getMessage()]);
