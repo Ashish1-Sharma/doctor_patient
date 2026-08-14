@@ -1,14 +1,24 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../providers/visit_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../models/appointment_model.dart';
 import '../../models/patient_model.dart';
+import '../../models/visit_report_model.dart';
+import '../../models/clinic_model.dart';
+import '../../providers/visit_provider.dart';
 import '../../services/appointment_service.dart';
 import '../../services/patient_service.dart';
+import '../../services/clinic_service.dart';
+import '../../services/pdf_generator.dart';
 import '../../theme/app_theme.dart';
+import '../new_treatment_screen.dart';
 
 /// STEP 6: Invoice confirmation & optional appointment step inside the New Treatment workflow.
 class InvoiceStep extends StatefulWidget {
@@ -25,6 +35,7 @@ class _InvoiceStepState extends State<InvoiceStep> {
   final _procedureController = TextEditingController();
 
   PatientModel? _patient;
+  ClinicModel? _clinic;
   String _doctorName = '';
   bool _isSavingAppt = false;
 
@@ -101,6 +112,70 @@ class _InvoiceStepState extends State<InvoiceStep> {
         }
       }
     } catch (_) {}
+
+    // Load Clinic details
+    try {
+      final clinic = await ClinicService.getClinicDetails(parentId);
+      if (clinic != null) {
+        setState(() {
+          _clinic = clinic;
+        });
+      }
+    } catch (_) {}
+
+    // Fetch and check if an appointment exists for this visit
+    try {
+      final response = await AppointmentService.getAppointments(provider.visit.doctorId);
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        if (responseData['statusCode'] == 200 && responseData['body'] is List) {
+          final list = responseData['body'] as List;
+          final fetched = list.map((json) => AppointmentModel.fromJson(json)).toList();
+          
+          final match = fetched.firstWhere(
+            (appt) => appt.visitId == provider.visit.id,
+            orElse: () => const AppointmentModel(
+              id: -1, patientId: -1, doctorId: -1, appointmentDate: '', procedureText: '', status: '', createdAt: '', updatedAt: ''
+            ),
+          );
+
+          if (match.id != -1) {
+            DateTime? parsedDate;
+            TimeOfDay? parsedTime;
+            try {
+              final parts = match.appointmentDate.split(' ');
+              if (parts.length >= 2) {
+                final dateParts = parts[0].split('-');
+                final timeParts = parts[1].split(':');
+                if (dateParts.length == 3) {
+                  parsedDate = DateTime(
+                    int.parse(dateParts[0]),
+                    int.parse(dateParts[1]),
+                    int.parse(dateParts[2]),
+                  );
+                }
+                if (timeParts.length >= 2) {
+                  parsedTime = TimeOfDay(
+                    hour: int.parse(timeParts[0]),
+                    minute: int.parse(timeParts[1]),
+                  );
+                }
+              }
+            } catch (_) {}
+
+            setState(() {
+              _addAppointment = true;
+              _selectedDate = parsedDate;
+              _selectedTime = parsedTime;
+              _procedureController.text = match.procedureText;
+            });
+            _syncPendingAppointmentToProvider();
+          }
+        }
+      }
+    } catch (e) {
+      print('DEBUG [InvoiceStep] Error loading appointments: $e');
+    }
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -252,12 +327,7 @@ class _InvoiceStepState extends State<InvoiceStep> {
           'appointmentDate': appointment.appointmentDate,
           'procedureText': appointment.procedureText,
         };
-        print('DEBUG [InvoiceStep]: Initiating appointment creation...');
-        print('DEBUG [InvoiceStep]: Appointment payload: $payload');
-        
-        final response = await AppointmentService.createAppointment(payload).timeout(const Duration(seconds: 4));
-        print('DEBUG [InvoiceStep]: Appointment API HTTP status: ${response.statusCode}');
-        print('DEBUG [InvoiceStep]: Appointment API raw body response: ${response.body}');
+        await AppointmentService.createAppointment(payload).timeout(const Duration(seconds: 4));
       } catch (e) {
         print('DEBUG [InvoiceStep] ERROR creating appointment: $e');
       }
@@ -271,51 +341,83 @@ class _InvoiceStepState extends State<InvoiceStep> {
     final shareText = _generateShareText(provider);
     await Clipboard.setData(ClipboardData(text: shareText));
 
-    if (mounted) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.check_circle_outline, color: AppTheme.whatsappGreen),
-              SizedBox(width: 8),
-              Text('Invoice Shared', style: TextStyle(fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('The invoice receipts & appointment details have been formatted and copied to your Clipboard.'),
-              const SizedBox(height: 12),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 150),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: SingleChildScrollView(
-                    child: Text(
-                      shareText,
-                      style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                    ),
-                  ),
+    if (!kIsWeb && Platform.isWindows) {
+      // Windows Desktop: Save PDF to Downloads folder and open WhatsApp
+      try {
+        final pdfBytes = await _generateInvoicePdf(provider);
+        final fileName = 'Receipt-${provider.payment.invoiceNo}.pdf';
+        final userProfile = Platform.environment['USERPROFILE'];
+        if (userProfile != null) {
+          final downloadsDir = Directory('$userProfile/Downloads');
+          if (await downloadsDir.exists()) {
+            final targetFile = File('${downloadsDir.path}/$fileName');
+            await targetFile.writeAsBytes(pdfBytes, flush: true);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Invoice PDF saved to Downloads: $fileName'),
+                  backgroundColor: AppTheme.emeraldSuccess,
+                  behavior: SnackBarBehavior.floating,
                 ),
-              ),
-              const SizedBox(height: 12),
-              const Text('You can now paste it directly into WhatsApp, SMS, or any messaging app.', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
-            ],
+              );
+            }
+          }
+        }
+      } catch (e) {
+        print('DEBUG [InvoiceStep] ERROR generating/saving PDF: $e');
+      }
+
+      // Open WhatsApp Web/Desktop chat directly with the full visit/invoice text
+      final phone = _patient?.phone.replaceAll(RegExp(r'\D'), '') ?? '';
+      final formattedPhone = phone.length == 10 ? '91$phone' : phone;
+      final whatsappUrl = 'https://api.whatsapp.com/send?phone=$formattedPhone&text=${Uri.encodeComponent(shareText)}';
+      final uri = Uri.parse(whatsappUrl);
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {}
+
+      // WhatsApp's web link can only pre-fill text, not attach a file, so make it
+      // explicit that the PDF still needs to be attached manually in the chat.
+      if (mounted) {
+        final fileName = 'Receipt-${provider.payment.invoiceNo}.pdf';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('WhatsApp opened with the visit details. Click 📎 Attach > Document and pick "$fileName" from Downloads to send the PDF too.'),
+            backgroundColor: AppTheme.tealAccent,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 6),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
+        );
+      }
+    } else {
+      // Mobile / Fallback:
+      // 1. Direct WhatsApp routing with the full visit/invoice text pre-filled
+      final phone = _patient?.phone.replaceAll(RegExp(r'\D'), '') ?? '';
+      final formattedPhone = phone.length == 10 ? '91$phone' : phone;
+      final whatsappUrl = 'https://api.whatsapp.com/send?phone=$formattedPhone&text=${Uri.encodeComponent(shareText)}';
+      final uri = Uri.parse(whatsappUrl);
+      
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (e) {
+        print('DEBUG [InvoiceStep] ERROR opening WhatsApp: $e');
+      }
+
+      // 2. Trigger PDF Share Sheet after a short delay
+      Future.delayed(const Duration(milliseconds: 1500), () async {
+        try {
+          final pdfBytes = await _generateInvoicePdf(provider);
+          final fileName = 'Receipt-${provider.payment.invoiceNo}.pdf';
+          
+          await Printing.sharePdf(
+            bytes: pdfBytes,
+            filename: fileName,
+            subject: 'Receipt-${provider.payment.invoiceNo}',
+          );
+        } catch (e) {
+          print('DEBUG [InvoiceStep] ERROR sharing PDF: $e');
+        }
+      });
     }
   }
 
@@ -516,34 +618,8 @@ class _InvoiceStepState extends State<InvoiceStep> {
           ),
           const SizedBox(height: 32),
 
-          // Invoice Button Suite
           ElevatedButton.icon(
-            onPressed: () {
-              ScaffoldMessenger.of(context).clearSnackBars();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      const Icon(Icons.info_outline, color: Colors.white),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('Invoice PDF Downloaded', style: TextStyle(fontWeight: FontWeight.bold)),
-                            Text('Receipt ${payment.invoiceNo}.pdf saved to device Downloads.', style: const TextStyle(fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  backgroundColor: AppTheme.primarySlate,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              );
-            },
+            onPressed: _isSavingAppt ? null : () => _downloadReport(provider),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primarySlate,
               foregroundColor: Colors.white,
@@ -551,7 +627,9 @@ class _InvoiceStepState extends State<InvoiceStep> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               elevation: 0,
             ),
-            icon: const Icon(Icons.file_download_outlined, size: 20),
+            icon: _isSavingAppt
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.file_download_outlined, size: 20),
             label: const Text('Download Invoice', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
           const SizedBox(height: 12),
@@ -660,5 +738,99 @@ class _InvoiceStepState extends State<InvoiceStep> {
         ),
       ],
     );
+  }
+
+  Future<Uint8List> _generateInvoicePdf(VisitProvider provider) async {
+    var visit = provider.visit;
+    if (_addAppointment && _selectedDate != null) {
+      final dateStr = '${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}';
+      final timeStr = _selectedTime != null
+          ? ' ${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}:00'
+          : ' 10:00:00';
+      visit = visit.copyWith(nextAppointmentDate: '$dateStr$timeStr');
+    }
+
+    final report = VisitReportModel(
+      visit: visit,
+      patient: _patient,
+      clinic: _clinic,
+      payment: provider.payment,
+    );
+
+    // Load Doctor credentials/phone/email
+    String doctorPhone = '';
+    String doctorEmail = '';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final profileStr = prefs.getString('user_profile');
+      if (profileStr != null) {
+        final profile = jsonDecode(profileStr);
+        doctorPhone = profile['phone'] as String? ?? '';
+        doctorEmail = profile['email'] as String? ?? '';
+      }
+    } catch (_) {}
+
+    return await PdfGenerator.generate(report, doctorPhone, doctorEmail);
+  }
+
+  Future<void> _downloadReport(VisitProvider provider) async {
+    setState(() {
+      _isSavingAppt = true;
+    });
+
+    try {
+      final pdfBytes = await _generateInvoicePdf(provider);
+      final fileName = 'Receipt-${provider.payment.invoiceNo}.pdf';
+
+      Directory? downloadsDir;
+      if (!kIsWeb) {
+        if (Platform.isAndroid) {
+          downloadsDir = Directory('/storage/emulated/0/Download');
+          if (!await downloadsDir.exists()) {
+            downloadsDir = await getExternalStorageDirectory();
+          }
+        } else if (Platform.isWindows) {
+          final userProfile = Platform.environment['USERPROFILE'];
+          if (userProfile != null) {
+            downloadsDir = Directory('$userProfile/Downloads');
+          }
+        } else if (Platform.isIOS) {
+          downloadsDir = await getApplicationDocumentsDirectory();
+        }
+      }
+
+      if (downloadsDir != null) {
+        final targetFile = File('${downloadsDir.path}/$fileName');
+        await targetFile.writeAsBytes(pdfBytes, flush: true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Invoice saved to Downloads: $fileName'),
+              backgroundColor: AppTheme.emeraldSuccess,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        // Fallback/Web: Share sheet
+        await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save invoice: $e'),
+            backgroundColor: AppTheme.redDestructive,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingAppt = false;
+        });
+      }
+    }
   }
 }

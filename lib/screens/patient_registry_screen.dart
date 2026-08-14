@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/patient_model.dart';
 import '../providers/patient_provider.dart';
 import '../theme/app_theme.dart';
@@ -122,50 +123,44 @@ class _PatientRegistryScreenState extends State<PatientRegistryScreen> {
     }
   }
 
-  void _simulateWhatsApp(BuildContext context, PatientModel patient) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.chat, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Opening WhatsApp chat for ${patient.fullName} (${patient.phone})...',
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: AppTheme.whatsappGreen,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+  Future<void> _launchWhatsApp(BuildContext context, PatientModel patient) async {
+    final phone = patient.phone.replaceAll(RegExp(r'\D'), '');
+    final urlStr = 'https://wa.me/$phone';
+    final uri = Uri.parse(urlStr);
+    
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to open WhatsApp: $e'),
+            backgroundColor: AppTheme.redDestructive,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
-  void _simulateCall(BuildContext context, PatientModel patient) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.phone, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Calling ${patient.fullName} at ${patient.phone}...',
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF3B82F6),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+  Future<void> _launchCall(BuildContext context, PatientModel patient) async {
+    final phone = patient.phone.replaceAll(RegExp(r'\D'), '');
+    final urlStr = 'tel:$phone';
+    final uri = Uri.parse(urlStr);
+    
+    try {
+      await launchUrl(uri);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to make call: $e'),
+            backgroundColor: AppTheme.redDestructive,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _navigateToAddPatient() async {
@@ -470,29 +465,35 @@ class _PatientRegistryScreenState extends State<PatientRegistryScreen> {
                                           Row(
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
-                                              Row(
-                                                children: [
-                                                  const Icon(Icons.event_available_outlined, size: 16, color: AppTheme.secondarySlate),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    'Total Visits: ${patient.totalVisits}',
-                                                    style: textTheme.bodyMedium?.copyWith(color: AppTheme.primarySlate),
-                                                  ),
-                                                ],
+                                              Expanded(
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(Icons.event_available_outlined, size: 16, color: AppTheme.secondarySlate),
+                                                    const SizedBox(width: 6),
+                                                    Flexible(
+                                                      child: Text(
+                                                        'Total Visits: ${patient.totalVisits}',
+                                                        style: textTheme.bodyMedium?.copyWith(color: AppTheme.primarySlate),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
+                                              const SizedBox(width: 8),
                                               // WhatsApp, Call, and Admin Delete Quick Action Icons
                                               Row(
                                                 children: [
                                                   IconButton(
                                                     icon: const Icon(Icons.chat_bubble_outline, color: AppTheme.whatsappGreen, size: 18),
-                                                    onPressed: () => _simulateWhatsApp(context, patient),
+                                                    onPressed: () => _launchWhatsApp(context, patient),
                                                     padding: EdgeInsets.zero,
                                                     constraints: const BoxConstraints(),
                                                   ),
                                                   const SizedBox(width: 12),
                                                   IconButton(
                                                     icon: const Icon(Icons.phone_outlined, color: Colors.blue, size: 18),
-                                                    onPressed: () => _simulateCall(context, patient),
+                                                    onPressed: () => _launchCall(context, patient),
                                                     padding: EdgeInsets.zero,
                                                     constraints: const BoxConstraints(),
                                                   ),

@@ -99,5 +99,20 @@ class Appointment
             throw new Exception("Error updating appointment: " . $e->getMessage());
         }
     }
+
+    /**
+     * Delete Appointment
+     */
+    public function delete($id)
+    {
+        try {
+            $query = "DELETE FROM {$this->table} WHERE id = :id";
+            $stmt = $this->connection->prepare($query);
+            $stmt->bindValue(":id", $id, PDO::PARAM_INT);
+            return $stmt->execute();
+        } catch (PDOException $e) {
+            throw new Exception("Error deleting appointment: " . $e->getMessage());
+        }
+    }
 }
 

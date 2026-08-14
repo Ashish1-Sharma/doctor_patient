@@ -148,6 +148,59 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     }
   }
 
+  Future<void> _confirmAndDeleteAppointment(AppointmentModel appointment) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Delete Appointment?'),
+        content: const Text('Are you sure you want to permanently delete this appointment slot?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.secondarySlate)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog
+              
+              showDialog(
+                context: this.context,
+                barrierDismissible: false,
+                builder: (context) => const Center(
+                  child: CircularProgressIndicator(color: AppTheme.tealAccent),
+                ),
+              );
+
+              bool success = false;
+              try {
+                final response = await AppointmentService.deleteAppointment(appointment.id)
+                    .timeout(const Duration(seconds: 8));
+                success = response.statusCode == 200;
+              } catch (_) {}
+
+              if (mounted) Navigator.pop(this.context); // Pop spinner
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(success ? 'Appointment deleted successfully.' : 'Failed to delete appointment.'),
+                    backgroundColor: success ? AppTheme.emeraldSuccess : AppTheme.redDestructive,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                if (success) {
+                  _loadData();
+                }
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: AppTheme.redDestructive, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -441,6 +494,12 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                                           Row(
                                             mainAxisAlignment: MainAxisAlignment.end,
                                             children: [
+                                              IconButton(
+                                                onPressed: () => _confirmAndDeleteAppointment(appt),
+                                                icon: const Icon(Icons.delete_outline, color: AppTheme.redDestructive),
+                                                tooltip: 'Delete Appointment',
+                                              ),
+                                              const SizedBox(width: 8),
                                               OutlinedButton.icon(
                                                 onPressed: () => _rescheduleAppointment(appt),
                                                 icon: const Icon(Icons.edit_calendar_outlined, size: 16),

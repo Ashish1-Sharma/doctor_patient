@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -142,13 +143,24 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   Future<void> _shareReport() async {
     if (_pdfBytes == null) return;
+    if (!kIsWeb && Platform.isWindows) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sharing not supported on Windows. Use Print/Save option.'),
+          backgroundColor: AppTheme.amberWarning,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      await _printReport();
+      return;
+    }
     await Printing.sharePdf(bytes: _pdfBytes!, filename: _fileName);
   }
 
   Future<void> _downloadReport() async {
     if (_pdfBytes == null) return;
     try {
-      if (Platform.isWindows) {
+      if (!kIsWeb && Platform.isWindows) {
         final userProfile = Platform.environment['USERPROFILE'];
         if (userProfile != null) {
           final downloadsDir = Directory('$userProfile/Downloads');

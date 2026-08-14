@@ -64,4 +64,24 @@ class AppointmentService {
       rethrow;
     }
   }
+
+  /// Delete a specific appointment.
+  /// POST /api/appointments/delete.php
+  static Future<http.Response> deleteAppointment(int id) async {
+    final url = Uri.parse('$baseUrl/appointments/delete.php');
+    final payload = {'id': id};
+    developer.log('AppointmentService.deleteAppointment: Calling POST $url with payload: $payload');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+      developer.log('AppointmentService.deleteAppointment: Code ${response.statusCode}.');
+      return response;
+    } catch (e) {
+      developer.log('AppointmentService.deleteAppointment: Exception caught: $e');
+      rethrow;
+    }
+  }
 }

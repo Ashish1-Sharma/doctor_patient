@@ -16,11 +16,13 @@ import '../models/payment_model.dart';
 class NewTreatmentScreen extends StatefulWidget {
   final VisitModel? visitToEdit;
   final PaymentModel? paymentToEdit;
+  final bool startAtStep1;
 
   const NewTreatmentScreen({
     super.key,
     this.visitToEdit,
     this.paymentToEdit,
+    this.startAtStep1 = false,
   });
 
   @override
@@ -28,7 +30,7 @@ class NewTreatmentScreen extends StatefulWidget {
 }
 
 class _NewTreatmentScreenState extends State<NewTreatmentScreen> {
-  final PageController _pageController = PageController();
+  late final PageController _pageController;
   int _currentStep = 0;
 
   final List<String> _stepTitles = [
@@ -39,6 +41,13 @@ class _NewTreatmentScreenState extends State<NewTreatmentScreen> {
     'Payment',
     'Invoice',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _currentStep = widget.startAtStep1 ? 1 : 0;
+    _pageController = PageController(initialPage: _currentStep);
+  }
 
   @override
   void dispose() {

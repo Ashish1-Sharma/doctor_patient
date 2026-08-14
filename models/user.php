@@ -153,7 +153,7 @@ public function subUserLogin($params)
 
             // Step 3: Validate child email and password
             foreach ($children as $child) {
-                if ($child['userEmail'] === $childEmail && $child['password'] === $inputPassword) {
+                if ($child['status'] == 1 && $child['userEmail'] === $childEmail && $child['password'] === $inputPassword) {
                     // Merge parent data into child data
                     $child['reg_date'] = $parent['reg_date'];
                     $child['purchase_id'] = $parent['purchase_id'];
@@ -348,6 +348,7 @@ public function getUsersByParentId($params)
                     flag
                   FROM {$this->table}
                   WHERE parentId = :parentId
+                  AND status = 1
                   ORDER BY id DESC";
 
         $stmt = $this->connection->prepare($query);
@@ -371,13 +372,13 @@ public function getUsersByParentId($params)
     }
 }
 
-public function updateSubUser($parentEmail, $id, $email, $password)
+public function updateSubUser($parentEmail, $id, $email, $password, $name, $mobile)
 {
     try {
-        // Fetch all emails associated with the given parentEmail
-        $query = 'SELECT userEmail FROM ' . $this->table . ' WHERE parentId = (SELECT id FROM ' . $this->table . ' WHERE userEmail = ?)';
+        // Fetch all emails associated with the given parentEmail (excluding this sub-user)
+        $query = 'SELECT userEmail FROM ' . $this->table . ' WHERE parentId = (SELECT id FROM ' . $this->table . ' WHERE userEmail = ?) AND id != ?';
         $stmt = $this->connection->prepare($query);
-        $stmt->execute([$parentEmail]);
+        $stmt->execute([$parentEmail, $id]);
         $emails = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
         // Check if the provided email already exists in the list
@@ -385,19 +386,13 @@ public function updateSubUser($parentEmail, $id, $email, $password)
             throw new Exception('The email is already in use.');
         }
 
-        // Update the email and password for the given id
-        $updateQuery = 'UPDATE ' . $this->table . ' SET userEmail = ?, password = ? WHERE id = ?';
+        // Update the name, mobile, email, and password for the given id
+        $updateQuery = 'UPDATE ' . $this->table . ' SET userName = ?, userMobile = ?, userEmail = ?, password = ? WHERE id = ?';
         $updateStmt = $this->connection->prepare($updateQuery);
 
-        // Hash the password before saving
-        $updateStmt->execute([$email, $password, $id]);
+        $updateStmt->execute([$name, $mobile, $email, $password, $id]);
 
-        // Check if the update affected any rows
-        if ($updateStmt->rowCount() > 0) {
-            return true; // Indicate success
-        } else {
-            throw new Exception('No changes made or user not found.');
-        }
+        return true; // Indicate success
     } catch (PDOException $e) {
         throw new Exception('Database error: ' . $e->getMessage());
     } catch (Exception $e) {

@@ -135,5 +135,24 @@ class AuthService {
       rethrow;
     }
   }
+
+  /// Deactivate/Delete a sub-user (Doctor/Staff).
+  /// POST /api/sub_user/deactivateSubUser.php
+  static Future<http.Response> deleteSubUser(int id) async {
+    final url = Uri.parse('$baseUrl/sub_user/deactivateSubUser.php');
+    developer.log('AuthService.deleteSubUser: Calling POST $url with id: $id');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'id': id, 'status': 0}),
+      );
+      developer.log('AuthService.deleteSubUser: Success code ${response.statusCode}. Body: ${response.body}');
+      return response;
+    } catch (e) {
+      developer.log('AuthService.deleteSubUser: Exception caught: $e');
+      rethrow;
+    }
+  }
 }
 

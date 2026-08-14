@@ -296,6 +296,7 @@ class _ManageDoctorsScreenState extends State<ManageDoctorsScreen> {
     final mobileController = TextEditingController(text: doc['userMobile'] ?? '');
     final passwordController = TextEditingController(text: doc['password']?.toString() ?? '');
     bool isSaving = false;
+    bool obscurePassword = true;
 
     showModalBottomSheet(
       context: context,
@@ -375,8 +376,21 @@ class _ManageDoctorsScreenState extends State<ManageDoctorsScreen> {
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: passwordController,
-                    decoration: const InputDecoration(hintText: 'Enter password'),
-                    obscureText: true,
+                    decoration: InputDecoration(
+                      hintText: 'Enter password',
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                          color: AppTheme.secondarySlate,
+                        ),
+                        onPressed: () {
+                          setModalState(() {
+                            obscurePassword = !obscurePassword;
+                          });
+                        },
+                      ),
+                    ),
+                    obscureText: obscurePassword,
                     validator: (val) {
                       if (val == null || val.isEmpty) {
                         return 'Enter password';
@@ -463,6 +477,53 @@ class _ManageDoctorsScreenState extends State<ManageDoctorsScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _confirmAndDeleteSubUser(Map<String, dynamic> doc) async {
+    final docName = doc['userName'] ?? doc['name'] ?? 'Doctor';
+    final docId = doc['id'];
+    if (docId == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Delete Doctor / Staff?'),
+        content: Text('Are you sure you want to permanently delete $docName? They will no longer be able to log in.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.secondarySlate)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog
+              
+              setState(() {
+                _isLoading = true;
+              });
+
+              try {
+                final rawId = docId is int ? docId : int.tryParse(docId.toString()) ?? 0;
+                final response = await AuthService.deleteSubUser(rawId).timeout(const Duration(seconds: 5));
+                final responseData = jsonDecode(response.body);
+
+                if (response.statusCode == 200 && responseData['statusCode'] == 200) {
+                  _showNotification('Staff member deleted successfully!', AppTheme.emeraldSuccess, Icons.check_circle_outline);
+                } else {
+                  _showNotification(responseData['message'] ?? 'Failed to delete staff member.', AppTheme.redDestructive, Icons.error_outline);
+                }
+              } catch (_) {
+                _showNotification('Network connection failed.', AppTheme.redDestructive, Icons.cloud_off_rounded);
+              } finally {
+                _fetchDoctors();
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: AppTheme.redDestructive, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
@@ -604,15 +665,31 @@ class _ManageDoctorsScreenState extends State<ManageDoctorsScreen> {
                                         ),
                                       ),
                                       const SizedBox(height: 8),
-                                      IconButton.filledTonal(
-                                        onPressed: () => _openEditDoctorDialog(doc),
-                                        style: IconButton.styleFrom(
-                                          backgroundColor: AppTheme.tealAccent.withValues(alpha: 0.1),
-                                          foregroundColor: AppTheme.tealAccent,
-                                          minimumSize: const Size(36, 36),
-                                          padding: EdgeInsets.zero,
-                                        ),
-                                        icon: const Icon(Icons.edit_outlined, size: 18),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton.filledTonal(
+                                            onPressed: () => _openEditDoctorDialog(doc),
+                                            style: IconButton.styleFrom(
+                                              backgroundColor: AppTheme.tealAccent.withValues(alpha: 0.1),
+                                              foregroundColor: AppTheme.tealAccent,
+                                              minimumSize: const Size(32, 32),
+                                              padding: EdgeInsets.zero,
+                                            ),
+                                            icon: const Icon(Icons.edit_outlined, size: 16),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          IconButton.filledTonal(
+                                            onPressed: () => _confirmAndDeleteSubUser(doc),
+                                            style: IconButton.styleFrom(
+                                              backgroundColor: AppTheme.redDestructive.withValues(alpha: 0.1),
+                                              foregroundColor: AppTheme.redDestructive,
+                                              minimumSize: const Size(32, 32),
+                                              padding: EdgeInsets.zero,
+                                            ),
+                                            icon: const Icon(Icons.delete_outline, size: 16),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),

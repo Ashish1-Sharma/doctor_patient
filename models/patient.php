@@ -152,6 +152,7 @@ class Patient
         $query = "SELECT * FROM {$this->table}
                   WHERE id = ?
                   AND parentId = ?
+                  AND status = 1
                   LIMIT 1";
 
         $stmt = $this->connection->prepare($query);
@@ -168,6 +169,7 @@ class Patient
         $query = "SELECT *
                   FROM {$this->table}
                   WHERE parentId = ?
+                  AND status = 1
                   AND (
                         full_name LIKE ?
                         OR phone LIKE ?
@@ -196,6 +198,7 @@ class Patient
         $query = "SELECT *
                   FROM {$this->table}
                   WHERE parentId = ?
+                  AND status = 1
                   ORDER BY created_at DESC";
 
         $stmt = $this->connection->prepare($query);

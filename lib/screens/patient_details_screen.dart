@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/patient_model.dart';
 import '../models/visit_model.dart';
@@ -18,6 +19,9 @@ import 'add_patient_screen.dart';
 import 'visit_details_screen.dart';
 import 'new_treatment_screen.dart';
 import 'patient_visit_report_screen.dart';
+import 'patient_visits_screen.dart';
+import 'patient_appointments_screen.dart';
+import 'patient_payments_screen.dart';
 
 class PatientDetailsScreen extends StatefulWidget {
   final PatientModel patient;
@@ -378,6 +382,59 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
     }
   }
 
+  Future<void> _confirmAndDeleteAppointment(AppointmentModel appointment) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Delete Appointment?'),
+        content: const Text('Are you sure you want to permanently delete this appointment slot?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.secondarySlate)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog
+              
+              showDialog(
+                context: this.context,
+                barrierDismissible: false,
+                builder: (context) => const Center(
+                  child: CircularProgressIndicator(color: AppTheme.tealAccent),
+                ),
+              );
+
+              bool success = false;
+              try {
+                final response = await AppointmentService.deleteAppointment(appointment.id)
+                    .timeout(const Duration(seconds: 8));
+                success = response.statusCode == 200;
+              } catch (_) {}
+
+              if (mounted) Navigator.pop(this.context); // Pop spinner
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(success ? 'Appointment deleted successfully.' : 'Failed to delete appointment.'),
+                    backgroundColor: success ? AppTheme.emeraldSuccess : AppTheme.redDestructive,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                if (success) {
+                  _fetchAppointments();
+                }
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: AppTheme.redDestructive, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _refreshPatientDetails() async {
     try {
       final response = await PatientService.getPatients(_doctorId);
@@ -419,7 +476,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
 
     VisitModel? fullVisit;
     try {
-      final res = await VisitService.getVisitById(_doctorId, visit.id);
+      final res = await VisitService.getVisitById(_parentId, visit.id);
       if (res.statusCode == 200) {
         final Map<String, dynamic> responseData = jsonDecode(res.body);
         if (responseData['statusCode'] == 200) {
@@ -458,7 +515,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
 
     linkedPayment ??= PaymentModel(
       id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      parentId: _doctorId,
+      parentId: _parentId,
       visitId: visit.id,
       patientId: visit.patientId,
       invoiceNo: 'INV-${visit.id}',
@@ -504,7 +561,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
       try {
         final payload = {
           "id": updatedVisit.id,
-          "parentId": _doctorId,
+          "parentId": _parentId,
           "chiefComplaintText": updatedVisit.chiefComplaintText,
           "chiefComplaintImages": updatedVisit.chiefComplaintImages,
           "clinicalFindingsText": updatedVisit.clinicalFindingsText,
@@ -556,16 +613,177 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
   }
 
   Future<void> _navigateToNewTreatment() async {
-    final result = await Navigator.push(
+    // Reset provider state first
+    final provider = Provider.of<VisitProvider>(context, listen: false);
+    provider.reset(
+      parentId: _parentId,
+      doctorId: _doctorId,
+    );
+    // Pre-populate patient
+    provider.updatePatient(
+      patientId: _currentPatient.id,
+      visitNo: _visits.length + 1,
+    );
+
+    final result = await Navigator.push<Map<String, dynamic>>(
       context,
       MaterialPageRoute(
-        builder: (context) => const NewTreatmentScreen(),
+        builder: (context) => const NewTreatmentScreen(startAtStep1: true),
       ),
     );
 
-    if (result == true) {
-      _fetchVisits();
-      _fetchPayments();
+    if (result != null && mounted) {
+      final VisitModel visit = result['visit'] as VisitModel;
+      final PaymentModel payment = result['payment'] as PaymentModel;
+      final AppointmentModel? appointment = result['appointment'] as AppointmentModel?;
+
+      await _asyncCreateVisitAndPayment(visit, payment, appointment);
+    }
+  }
+
+  Future<void> _asyncCreateVisitAndPayment(VisitModel visit, PaymentModel payment, AppointmentModel? appointment) async {
+    setState(() {
+      _isLoadingVisits = true;
+    });
+
+    int numericVisitNo = 1;
+    final match = RegExp(r'\d+').firstMatch(visit.visitNo);
+    if (match != null) {
+      numericVisitNo = int.tryParse(match.group(0)!) ?? 1;
+    }
+
+    final payload = {
+      "parentId": _parentId,
+      "patientId": visit.patientId,
+      "doctorId": _doctorId,
+      "visitNo": numericVisitNo,
+      "visitDate": visit.visitDate.length >= 10 ? visit.visitDate.substring(0, 10) : visit.visitDate,
+      "chiefComplaintText": visit.chiefComplaintText,
+      "chiefComplaintImages": visit.chiefComplaintImages,
+      "clinicalFindingsText": visit.clinicalFindingsText,
+      "clinicalFindingsImages": visit.clinicalFindingsImages,
+      "labText": visit.labText,
+      "labImages": visit.labImages,
+      "advisedTreatmentText": visit.advisedTreatmentText,
+      "advisedTreatmentImages": visit.advisedTreatmentImages,
+      "treatmentDoneText": visit.treatmentDoneText,
+      "treatmentDoneImages": visit.treatmentDoneImages,
+      "medicationText": visit.medicationText,
+      "medicationImages": visit.medicationImages,
+      "nextAppointmentDate": visit.nextAppointmentDate.trim().isEmpty ? null : (visit.nextAppointmentDate.length >= 10 ? visit.nextAppointmentDate.substring(0, 10) : visit.nextAppointmentDate),
+      "notes": visit.notes
+    };
+
+    try {
+      final response = await VisitService.createVisit(payload).timeout(const Duration(seconds: 8));
+      final responseData = jsonDecode(response.body);
+      final httpOk = response.statusCode == 200 || response.statusCode == 201;
+      final serverOk = responseData['statusCode'] == 200 || responseData['statusCode'] == 201;
+
+      if (httpOk || serverOk) {
+        final rawId = responseData['body'] != null ? responseData['body']['id'] : null;
+        if (rawId == null) {
+          throw Exception('Visit created but did not return insert ID.');
+        }
+        final newVisitId = rawId is int ? rawId : int.parse(rawId.toString());
+
+        // Now record payment linked to this actual newVisitId
+        final paymentPayload = {
+          "parentId": _parentId,
+          "visitId": newVisitId,
+          "patientId": payment.patientId,
+          "invoiceNo": payment.invoiceNo,
+          "subtotal": payment.subtotal,
+          "discount": payment.discount,
+          "totalAmount": payment.totalAmount,
+          "paidAmount": payment.paidAmount,
+          "pendingAmount": payment.pendingAmount,
+          "paymentMethod": payment.paymentMethod,
+          "paymentStatus": payment.paymentStatus,
+          "paymentDate": payment.paymentDate,
+          "remarks": payment.remarks,
+          "createdBy": _doctorId,
+        };
+
+        final payRes = await PaymentService.createPayment(paymentPayload).timeout(const Duration(seconds: 8));
+        final payData = jsonDecode(payRes.body);
+
+        // If an appointment was configured, schedule it with the real visit ID
+        if (appointment != null) {
+          final appointmentPayload = {
+            'visitId': newVisitId,
+            'patientId': appointment.patientId,
+            'doctorId': appointment.doctorId,
+            'appointmentDate': appointment.appointmentDate,
+            'procedureText': appointment.procedureText,
+          };
+          await AppointmentService.createAppointment(appointmentPayload).timeout(const Duration(seconds: 8));
+        }
+
+        // Update patient's visit count and last visit date
+        final updatedP = PatientModel(
+          id: _currentPatient.id,
+          parentId: _currentPatient.parentId,
+          patientCode: _currentPatient.patientCode,
+          profileImage: _currentPatient.profileImage,
+          fullName: _currentPatient.fullName,
+          age: _currentPatient.age,
+          gender: _currentPatient.gender,
+          dateOfBirth: _currentPatient.dateOfBirth,
+          phone: _currentPatient.phone,
+          email: _currentPatient.email,
+          address: _currentPatient.address,
+          medicalConditions: _currentPatient.medicalConditions,
+          emergencyContactName: _currentPatient.emergencyContactName,
+          emergencyContactPhone: _currentPatient.emergencyContactPhone,
+          totalVisits: _currentPatient.totalVisits + 1,
+          lastVisitDate: visit.visitDate.length >= 10 ? visit.visitDate.substring(0, 10) : visit.visitDate,
+          createdBy: _currentPatient.createdBy,
+          status: _currentPatient.status,
+          createdAt: _currentPatient.createdAt,
+          updatedAt: DateTime.now().toString().substring(0, 19),
+        );
+
+        // Update local patient profile on backend database
+        await PatientService.updatePatient(updatedP.toJson());
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Treatment visit and payment recorded in database!'),
+              backgroundColor: AppTheme.emeraldSuccess,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          );
+        }
+      } else {
+        throw Exception(responseData['message'] ?? 'Failed to save visit');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving visit: $e'),
+            backgroundColor: AppTheme.redDestructive,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } finally {
+      // Re-fetch all data to refresh
+      await _fetchVisits();
+      await _fetchAppointments();
+      await _fetchPayments();
+      await _refreshPatientDetails();
+      if (mounted) {
+        setState(() {
+          _isLoadingVisits = false;
+        });
+      }
     }
   }
 
@@ -802,15 +1020,43 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
             ),
             const SizedBox(height: 12),
             // Contact Phone Row
-            Row(
-              children: [
-                const Icon(Icons.phone_outlined, size: 16, color: AppTheme.secondarySlate),
-                const SizedBox(width: 8),
-                Text(
-                  _currentPatient.phone,
-                  style: const TextStyle(fontSize: 13, color: AppTheme.primarySlate),
+            InkWell(
+              onTap: () async {
+                final phone = _currentPatient.phone.replaceAll(RegExp(r'\D'), '');
+                final uri = Uri.parse('tel:$phone');
+                try {
+                  await launchUrl(uri);
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to open dialer: $e'),
+                        backgroundColor: AppTheme.redDestructive,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.phone_outlined, size: 16, color: AppTheme.tealAccent),
+                    const SizedBox(width: 8),
+                    Text(
+                      _currentPatient.phone,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.primarySlate,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
             if (_currentPatient.address.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -931,7 +1177,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final boxWidth = (constraints.maxWidth - 24) / 4; // 4 boxes with spacing
+          final boxWidth = (constraints.maxWidth - 16) / 3; // 3 boxes with spacing
           return Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -942,6 +1188,17 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                 bgColor: const Color(0xFFE8F5E9),
                 value: '${_visits.length}',
                 label: 'Total Visits',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => PatientVisitsScreen(
+                        patient: _currentPatient,
+                        visits: _visits,
+                      ),
+                    ),
+                  );
+                },
               ),
               _buildMetricBox(
                 width: boxWidth,
@@ -950,6 +1207,19 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                 bgColor: const Color(0xFFE3F2FD),
                 value: '${_appointments.length}',
                 label: 'Upcoming Appt',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => PatientAppointmentsScreen(
+                        patient: _currentPatient,
+                        appointments: _appointments,
+                        doctorId: _doctorId,
+                        onRefresh: _fetchAppointments,
+                      ),
+                    ),
+                  );
+                },
               ),
               _buildMetricBox(
                 width: boxWidth,
@@ -958,7 +1228,18 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                 bgColor: const Color(0xFFFFF3E0),
                 value: '₹${_pendingPaymentSum.toStringAsFixed(0)}',
                 label: 'Pending Pay',
-              )
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => PatientPaymentsScreen(
+                        patient: _currentPatient,
+                        payments: _payments,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ],
           );
         },
@@ -973,42 +1254,50 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
     required Color bgColor,
     required String value,
     required String label,
+    required VoidCallback onTap,
   }) {
-    return Container(
-      width: width,
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: bgColor,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 16, color: iconColor),
+        child: Container(
+          width: width,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primarySlate),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 16, color: iconColor),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primarySlate),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: const TextStyle(fontSize: 9, color: AppTheme.secondarySlate, fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 9, color: AppTheme.secondarySlate, fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1168,20 +1457,28 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primarySlate),
                         ),
                         const SizedBox(height: 12),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: ElevatedButton.icon(
-                            onPressed: () => _rescheduleAppointment(appt),
-                            icon: const Icon(Icons.edit_calendar_outlined, size: 14),
-                            label: const Text('Reschedule', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00796B),
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            IconButton(
+                              onPressed: () => _confirmAndDeleteAppointment(appt),
+                              icon: const Icon(Icons.delete_outline, color: AppTheme.redDestructive, size: 20),
+                              tooltip: 'Delete Appointment',
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              onPressed: () => _rescheduleAppointment(appt),
+                              icon: const Icon(Icons.edit_calendar_outlined, size: 14),
+                              label: const Text('Reschedule', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF00796B),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
