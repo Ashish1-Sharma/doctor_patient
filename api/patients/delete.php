@@ -29,8 +29,8 @@ function sendResponse($statusCode, $message, $body = null)
 
 if (isset($data) && isset($data->id) && isset($data->parentId)) {
     try {
-        // Soft delete: set status = 0
-        $result = $patient->changeStatus($data->id, $data->parentId, 0);
+        // Delete patient profile and all associated visits, payments, and appointments
+        $result = $patient->deletePatientAndRecords($data->id, $data->parentId);
 
         if ($result) {
             sendResponse(200, 'Patient and associated records deleted successfully');

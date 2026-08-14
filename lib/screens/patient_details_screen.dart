@@ -383,7 +383,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
   }
 
   Future<void> _confirmAndDeleteAppointment(AppointmentModel appointment) async {
-    showDialog(
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -391,48 +391,38 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
         content: const Text('Are you sure you want to permanently delete this appointment slot?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel', style: TextStyle(color: AppTheme.secondarySlate)),
           ),
           TextButton(
-            onPressed: () async {
-              Navigator.pop(context); // Close dialog
-              
-              showDialog(
-                context: this.context,
-                barrierDismissible: false,
-                builder: (context) => const Center(
-                  child: CircularProgressIndicator(color: AppTheme.tealAccent),
-                ),
-              );
-
-              bool success = false;
-              try {
-                final response = await AppointmentService.deleteAppointment(appointment.id)
-                    .timeout(const Duration(seconds: 8));
-                success = response.statusCode == 200;
-              } catch (_) {}
-
-              if (mounted) Navigator.pop(this.context); // Pop spinner
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(success ? 'Appointment deleted successfully.' : 'Failed to delete appointment.'),
-                    backgroundColor: success ? AppTheme.emeraldSuccess : AppTheme.redDestructive,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-                if (success) {
-                  _fetchAppointments();
-                }
-              }
-            },
+            onPressed: () => Navigator.pop(context, true),
             child: const Text('Delete', style: TextStyle(color: AppTheme.redDestructive, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
+
+    if (confirm != true || !mounted) return;
+
+    bool success = false;
+    try {
+      final response = await AppointmentService.deleteAppointment(appointment.id)
+          .timeout(const Duration(seconds: 8));
+      success = response.statusCode == 200;
+    } catch (_) {}
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Appointment deleted successfully.' : 'Failed to delete appointment.'),
+          backgroundColor: success ? AppTheme.emeraldSuccess : AppTheme.redDestructive,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      if (success) {
+        _fetchAppointments();
+      }
+    }
   }
 
   Future<void> _refreshPatientDetails() async {

@@ -23,6 +23,14 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   int _doctorId = 1;
   int _parentId = 1;
   DateTimeRange? _selectedDateRange;
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   String _formatDate(DateTime date) {
     final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -112,13 +120,9 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     final timeStr = ' ${newDateTime.hour.toString().padLeft(2, '0')}:${newDateTime.minute.toString().padLeft(2, '0')}:00';
     final fullDateTimeStr = '$dateStr$timeStr';
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(color: AppTheme.tealAccent),
-      ),
-    );
+    setState(() {
+      _isLoading = true;
+    });
 
     bool success = false;
     try {
@@ -132,8 +136,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       success = response.statusCode == 200;
     } catch (_) {}
 
-    if (mounted) Navigator.pop(context); // Pop spinner
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -144,12 +146,16 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       );
       if (success) {
         _loadData();
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
 
   Future<void> _confirmAndDeleteAppointment(AppointmentModel appointment) async {
-    showDialog(
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -157,48 +163,46 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
         content: const Text('Are you sure you want to permanently delete this appointment slot?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel', style: TextStyle(color: AppTheme.secondarySlate)),
           ),
           TextButton(
-            onPressed: () async {
-              Navigator.pop(context); // Close dialog
-              
-              showDialog(
-                context: this.context,
-                barrierDismissible: false,
-                builder: (context) => const Center(
-                  child: CircularProgressIndicator(color: AppTheme.tealAccent),
-                ),
-              );
-
-              bool success = false;
-              try {
-                final response = await AppointmentService.deleteAppointment(appointment.id)
-                    .timeout(const Duration(seconds: 8));
-                success = response.statusCode == 200;
-              } catch (_) {}
-
-              if (mounted) Navigator.pop(this.context); // Pop spinner
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(success ? 'Appointment deleted successfully.' : 'Failed to delete appointment.'),
-                    backgroundColor: success ? AppTheme.emeraldSuccess : AppTheme.redDestructive,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-                if (success) {
-                  _loadData();
-                }
-              }
-            },
+            onPressed: () => Navigator.pop(context, true),
             child: const Text('Delete', style: TextStyle(color: AppTheme.redDestructive, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    bool success = false;
+    try {
+      final response = await AppointmentService.deleteAppointment(appointment.id)
+          .timeout(const Duration(seconds: 8));
+      success = response.statusCode == 200;
+    } catch (_) {}
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Appointment deleted successfully.' : 'Failed to delete appointment.'),
+          backgroundColor: success ? AppTheme.emeraldSuccess : AppTheme.redDestructive,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      if (success) {
+        _loadData();
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -280,19 +284,32 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     final List<AppointmentModel> upcomingList = [];
     final List<AppointmentModel> passedList = [];
 
-    final filteredAppts = _selectedDateRange == null
-        ? _appointments
-        : _appointments.where((appt) {
-            try {
-              final apptDate = DateTime.parse(appt.appointmentDate);
-              final dateOnly = DateTime(apptDate.year, apptDate.month, apptDate.day);
-              final startOnly = DateTime(_selectedDateRange!.start.year, _selectedDateRange!.start.month, _selectedDateRange!.start.day);
-              final endOnly = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day);
-              return !dateOnly.isBefore(startOnly) && !dateOnly.isAfter(endOnly);
-            } catch (_) {
-              return true;
-            }
-          }).toList();
+    final filteredAppts = _appointments.where((appt) {
+      if (_selectedDateRange != null) {
+        try {
+          final apptDate = DateTime.parse(appt.appointmentDate);
+          final dateOnly = DateTime(apptDate.year, apptDate.month, apptDate.day);
+          final startOnly = DateTime(_selectedDateRange!.start.year, _selectedDateRange!.start.month, _selectedDateRange!.start.day);
+          final endOnly = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day);
+          if (dateOnly.isBefore(startOnly) || dateOnly.isAfter(endOnly)) {
+            return false;
+          }
+        } catch (_) {}
+      }
+
+      if (_searchQuery.trim().isNotEmpty) {
+        final query = _searchQuery.trim().toLowerCase();
+        final patient = _getPatient(appt.patientId);
+        final patientName = (patient?.fullName ?? '').toLowerCase();
+        final patientCode = (patient?.patientCode ?? '').toLowerCase();
+        final procedure = appt.procedureText.toLowerCase();
+        if (!patientName.contains(query) && !patientCode.contains(query) && !procedure.contains(query)) {
+          return false;
+        }
+      }
+
+      return true;
+    }).toList();
 
     for (final appt in filteredAppts) {
       if (appt.appointmentDate.length >= 10) {
@@ -324,6 +341,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final groups = _groupAppointments();
+    final hasAppointments = groups.values.any((list) => list.isNotEmpty);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -345,6 +363,41 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       ),
       body: Column(
         children: [
+          // Search Input Bar
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (val) {
+                setState(() {
+                  _searchQuery = val;
+                });
+              },
+              decoration: InputDecoration(
+                hintText: 'Search by patient name, code, or procedure...',
+                prefixIcon: const Icon(Icons.search, color: AppTheme.secondarySlate),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: AppTheme.secondarySlate),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchQuery = '';
+                          });
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: const Color(0xFFF1F5F9),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
           if (_selectedDateRange != null)
             Container(
               decoration: const BoxDecoration(
@@ -375,16 +428,20 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator(color: AppTheme.tealAccent))
-                : _appointments.isEmpty
+                : !hasAppointments
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.calendar_today_outlined, size: 64, color: AppTheme.secondarySlate.withValues(alpha: 0.3)),
                             const SizedBox(height: 16),
-                            const Text(
-                              'No appointments scheduled yet.',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.secondarySlate),
+                            Text(
+                              _searchQuery.isNotEmpty
+                                  ? 'No appointments found matching "$_searchQuery".'
+                                  : _selectedDateRange != null
+                                      ? 'No appointments scheduled in selected range.'
+                                      : 'No appointments scheduled yet.',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.secondarySlate),
                             ),
                           ],
                         ),

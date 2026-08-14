@@ -225,4 +225,42 @@ class Patient
             $parentId
         ]);
     }
+
+    /**
+     * Delete Patient and permanently remove all associated visits, payments, and appointments
+     */
+    public function deletePatientAndRecords($id, $parentId)
+    {
+        try {
+            $this->connection->beginTransaction();
+
+            // Delete associated payments
+            $paymentQuery = "DELETE FROM payments WHERE patient_id = ? AND parentId = ?";
+            $paymentStmt = $this->connection->prepare($paymentQuery);
+            $paymentStmt->execute([$id, $parentId]);
+
+            // Delete associated appointments
+            $appointmentQuery = "DELETE FROM appointments WHERE patient_id = ?";
+            $appointmentStmt = $this->connection->prepare($appointmentQuery);
+            $appointmentStmt->execute([$id]);
+
+            // Delete associated visits
+            $visitQuery = "DELETE FROM visits WHERE patient_id = ? AND parentId = ?";
+            $visitStmt = $this->connection->prepare($visitQuery);
+            $visitStmt->execute([$id, $parentId]);
+
+            // Soft delete patient (set status = 0)
+            $patientQuery = "UPDATE {$this->table} SET status = 0 WHERE id = ? AND parentId = ?";
+            $patientStmt = $this->connection->prepare($patientQuery);
+            $patientStmt->execute([$id, $parentId]);
+
+            $this->connection->commit();
+            return true;
+        } catch (Exception $e) {
+            if ($this->connection->inTransaction()) {
+                $this->connection->rollBack();
+            }
+            throw new Exception("Error deleting patient and associated records: " . $e->getMessage());
+        }
+    }
 }

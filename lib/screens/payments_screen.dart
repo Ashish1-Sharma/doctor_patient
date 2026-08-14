@@ -22,6 +22,14 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   List<PatientModel> _patients = [];
   int _parentId = 1;
   DateTimeRange? _selectedDateRange;
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   String _formatDate(DateTime date) {
     final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -280,19 +288,32 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    final filteredPayments = _selectedDateRange == null
-        ? _payments
-        : _payments.where((payment) {
-            try {
-              final pDate = DateTime.parse(payment.paymentDate);
-              final dateOnly = DateTime(pDate.year, pDate.month, pDate.day);
-              final startOnly = DateTime(_selectedDateRange!.start.year, _selectedDateRange!.start.month, _selectedDateRange!.start.day);
-              final endOnly = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day);
-              return !dateOnly.isBefore(startOnly) && !dateOnly.isAfter(endOnly);
-            } catch (_) {
-              return true;
-            }
-          }).toList();
+    final filteredPayments = _payments.where((payment) {
+      if (_selectedDateRange != null) {
+        try {
+          final pDate = DateTime.parse(payment.paymentDate);
+          final dateOnly = DateTime(pDate.year, pDate.month, pDate.day);
+          final startOnly = DateTime(_selectedDateRange!.start.year, _selectedDateRange!.start.month, _selectedDateRange!.start.day);
+          final endOnly = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day);
+          if (dateOnly.isBefore(startOnly) || dateOnly.isAfter(endOnly)) {
+            return false;
+          }
+        } catch (_) {}
+      }
+
+      if (_searchQuery.trim().isNotEmpty) {
+        final query = _searchQuery.trim().toLowerCase();
+        final patient = _getPatient(payment.patientId);
+        final patientName = (patient?.fullName ?? '').toLowerCase();
+        final patientCode = (patient?.patientCode ?? '').toLowerCase();
+        final invoiceNo = payment.invoiceNo.toLowerCase();
+        if (!patientName.contains(query) && !patientCode.contains(query) && !invoiceNo.contains(query)) {
+          return false;
+        }
+      }
+
+      return true;
+    }).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -314,6 +335,41 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       ),
       body: Column(
         children: [
+          // Search Input Bar
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (val) {
+                setState(() {
+                  _searchQuery = val;
+                });
+              },
+              decoration: InputDecoration(
+                hintText: 'Search by patient name, code, or invoice...',
+                prefixIcon: const Icon(Icons.search, color: AppTheme.secondarySlate),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: AppTheme.secondarySlate),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchQuery = '';
+                          });
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: const Color(0xFFF1F5F9),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
           if (_selectedDateRange != null)
             Container(
               decoration: const BoxDecoration(
@@ -352,9 +408,11 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                             Icon(Icons.receipt_long_outlined, size: 64, color: AppTheme.secondarySlate.withValues(alpha: 0.3)),
                             const SizedBox(height: 16),
                             Text(
-                              _selectedDateRange != null
-                                  ? 'No invoices recorded in this range.'
-                                  : 'No invoices recorded yet.',
+                              _searchQuery.isNotEmpty
+                                  ? 'No invoices found matching "$_searchQuery".'
+                                  : _selectedDateRange != null
+                                      ? 'No invoices recorded in this range.'
+                                      : 'No invoices recorded yet.',
                               style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.secondarySlate),
                             ),
                           ],
