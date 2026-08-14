@@ -47,16 +47,16 @@ if (isset($data)) {
         "doctor_reg_cert" => $data->doctor_reg_cert ?? null,
         "terms" => $data->terms ?? null
     ];
+    if (isset($data->id) && !empty($data->id)) {
+        $params['id'] = $data->id;
+    }
 
     try {
-        if (isset($data->id) && !empty($data->id)) {
-            $result = $company->update($data->id, $params);
-            $message = $result ? "Company updated successfully" : "Failed to update company";
-            sendResponse($result ? 200 : 500, $message);
+        $companyId = $company->saveOrUpdate($params);
+        if ($companyId) {
+            sendResponse(200, "Company saved successfully", ['id' => (int)$companyId]);
         } else {
-            $id = $company->create($params);
-            $message = $id ? "Company created successfully" : "Failed to create company";
-            sendResponse($id ? 201 : 500, $message, ['id' => $id]);
+            sendResponse(500, "Failed to save company");
         }
     } catch (Exception $e) {
         sendResponse(500, "Error processing request", ['error' => $e->getMessage()]);

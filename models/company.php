@@ -135,4 +135,41 @@ public function getByUserId($userId)
 
         return false; // Return false if the update failed
     }
+
+    /**
+     * Save or Update Company (upsert by id or userId) and remove duplicates
+     */
+    public function saveOrUpdate($data)
+    {
+        $userId = $data['userId'] ?? null;
+        $id = $data['id'] ?? null;
+
+        $targetId = null;
+
+        if (!empty($id)) {
+            $targetId = $id;
+        } else if (!empty($userId)) {
+            // Find existing company record for this userId
+            $stmt = $this->connection->prepare("SELECT id FROM {$this->table} WHERE userId = ? ORDER BY id ASC LIMIT 1");
+            $stmt->execute([$userId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                $targetId = $row['id'];
+            }
+        }
+
+        if ($targetId) {
+            $this->update($targetId, $data);
+
+            // Clean up redundant duplicate rows for this userId if present
+            if (!empty($userId)) {
+                $cleanStmt = $this->connection->prepare("DELETE FROM {$this->table} WHERE userId = ? AND id != ?");
+                $cleanStmt->execute([$userId, $targetId]);
+            }
+
+            return $targetId;
+        } else {
+            return $this->create($data);
+        }
+    }
 }

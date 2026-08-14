@@ -59,11 +59,11 @@ if (isset($data)) {
     ];
 
     try {
-        // Call the update method from the Company model
-        $isUpdated = $company->update($data->id, $params);
+        $params['id'] = $data->id;
+        $companyId = $company->saveOrUpdate($params);
 
-        if ($isUpdated) {
-            sendResponse(200, "Company updated successfully");
+        if ($companyId) {
+            sendResponse(200, "Company updated successfully", ['id' => (int)$companyId]);
         } else {
             sendResponse(500, "Failed to update company");
         }
