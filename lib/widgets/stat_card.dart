@@ -117,14 +117,34 @@ class _StatCardState extends State<StatCard> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      widget.primaryValue,
-                      style: textTheme.displayLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 28,
-                      ),
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          widget.primaryValue,
+                          style: textTheme.displayLarge?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 26,
+                          ),
+                        ),
+                        if (widget.secondaryText.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              widget.secondaryText,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const Divider(color: Colors.white24, height: 16),
                     // Quick Action Tags

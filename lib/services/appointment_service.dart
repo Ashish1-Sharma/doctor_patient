@@ -26,11 +26,16 @@ class AppointmentService {
     }
   }
 
-  /// Get scheduled appointments list for a doctor.
+  /// Get scheduled appointments list for a doctor with optional range (today, tomorrow, week, custom, all).
   /// POST /api/appointments/list.php
-  static Future<http.Response> getAppointments(int doctorId) async {
+  static Future<http.Response> getAppointments(int doctorId, {String range = 'all', String? from, String? to}) async {
     final url = Uri.parse('$baseUrl/appointments/list.php');
-    final payload = {'doctorId': doctorId};
+    final payload = {
+      'doctorId': doctorId,
+      'range': range,
+      if (from != null) 'from': from,
+      if (to != null) 'to': to,
+    };
     developer.log('AppointmentService.getAppointments: Calling POST $url with payload: $payload');
     try {
       final response = await http.post(
@@ -42,6 +47,46 @@ class AppointmentService {
       return response;
     } catch (e) {
       developer.log('AppointmentService.getAppointments: Exception caught: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetch single appointment details with joined patient information.
+  /// POST /api/appointments/detail.php
+  static Future<http.Response> getAppointmentDetail(int id) async {
+    final url = Uri.parse('$baseUrl/appointments/detail.php');
+    final payload = {'id': id};
+    developer.log('AppointmentService.getAppointmentDetail: Calling POST $url with payload: $payload');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+      developer.log('AppointmentService.getAppointmentDetail: Code ${response.statusCode}.');
+      return response;
+    } catch (e) {
+      developer.log('AppointmentService.getAppointmentDetail: Exception caught: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetch appointment stats (today count & total upcoming count).
+  /// POST /api/appointments/stats.php
+  static Future<http.Response> getAppointmentStats(int doctorId) async {
+    final url = Uri.parse('$baseUrl/appointments/stats.php');
+    final payload = {'doctorId': doctorId};
+    developer.log('AppointmentService.getAppointmentStats: Calling POST $url with payload: $payload');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+      developer.log('AppointmentService.getAppointmentStats: Code ${response.statusCode}.');
+      return response;
+    } catch (e) {
+      developer.log('AppointmentService.getAppointmentStats: Exception caught: $e');
       rethrow;
     }
   }

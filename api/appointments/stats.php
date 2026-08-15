@@ -5,7 +5,7 @@ ini_set('display_errors', 1);
 
 header('Access-Control-Allow-Origin: *');
 header('Content-Type: application/json');
-header('Access-Control-Allow-Methods: POST');
+header('Access-Control-Allow-Methods: POST, GET');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 include_once('../../config/database.php');
@@ -26,21 +26,14 @@ function sendResponse($statusCode, $message, $body = null)
     ]);
 }
 
-if (isset($data) && isset($data->doctorId)) {
+$doctorId = $data->doctorId ?? $_GET['doctorId'] ?? null;
+
+if ($doctorId) {
     try {
-        $range = $data->range ?? 'all';
-        $from = $data->from ?? null;
-        $to = $data->to ?? null;
-
-        if ($range === 'all') {
-            $list = $appointment->getByDoctorIdAndRange($data->doctorId, 'all');
-        } else {
-            $list = $appointment->getByDoctorIdAndRange($data->doctorId, $range, $from, $to);
-        }
-
-        sendResponse(200, 'Appointments loaded successfully', $list);
+        $stats = $appointment->getStatsByDoctorId($doctorId);
+        sendResponse(200, 'Appointment stats loaded successfully', $stats);
     } catch (Exception $e) {
-        sendResponse(500, 'Error loading appointments', [
+        sendResponse(500, 'Error loading appointment stats', [
             'error' => $e->getMessage()
         ]);
     }

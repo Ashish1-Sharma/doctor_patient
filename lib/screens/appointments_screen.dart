@@ -6,9 +6,10 @@ import '../models/patient_model.dart';
 import '../services/appointment_service.dart';
 import '../services/patient_service.dart';
 import '../theme/app_theme.dart';
-import 'patient_details_screen.dart';
+import 'appointment_detail_screen.dart';
 
-/// Screen listing appointments grouped by date (Today, Tomorrow, Upcoming).
+/// Screen listing appointments with range filtering (Today, Tomorrow, Week, Custom),
+/// animated transitions, grouped date headers, and simplified tappable appointment cards.
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
 
@@ -22,9 +23,18 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   List<PatientModel> _patients = [];
   int _doctorId = 1;
   int _parentId = 1;
-  DateTimeRange? _selectedDateRange;
+
   final _searchController = TextEditingController();
   String _searchQuery = '';
+
+  String _selectedRange = 'all'; // 'all', 'today', 'tomorrow', 'week', 'custom'
+  DateTimeRange? _customDateRange;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
 
   @override
   void dispose() {
@@ -35,180 +45,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   String _formatDate(DateTime date) {
     final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
-  }
-
-  Future<void> _pickDateRange(BuildContext context) async {
-    final DateTimeRange? picked = await showDateRangePicker(
-      context: context,
-      initialDateRange: _selectedDateRange ?? DateTimeRange(
-        start: DateTime.now().subtract(const Duration(days: 7)),
-        end: DateTime.now().add(const Duration(days: 14)),
-      ),
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: AppTheme.tealAccent,
-              onPrimary: Colors.white,
-              onSurface: AppTheme.primarySlate,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      setState(() {
-        _selectedDateRange = picked;
-      });
-    }
-  }
-
-  Future<void> _rescheduleAppointment(AppointmentModel appointment) async {
-    final DateTime? pickedDate = await showDatePicker(
-      context: context,
-      initialDate: DateTime.tryParse(appointment.appointmentDate) ?? DateTime.now().add(const Duration(days: 1)),
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: AppTheme.tealAccent,
-              onPrimary: Colors.white,
-              onSurface: AppTheme.primarySlate,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (pickedDate == null || !mounted) return;
-
-    final TimeOfDay? pickedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(DateTime.tryParse(appointment.appointmentDate) ?? DateTime.now()),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: AppTheme.tealAccent,
-              onPrimary: Colors.white,
-              onSurface: AppTheme.primarySlate,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (pickedTime == null || !mounted) return;
-
-    final newDateTime = DateTime(
-      pickedDate.year,
-      pickedDate.month,
-      pickedDate.day,
-      pickedTime.hour,
-      pickedTime.minute,
-    );
-
-    final dateStr = '${newDateTime.year}-${newDateTime.month.toString().padLeft(2, '0')}-${newDateTime.day.toString().padLeft(2, '0')}';
-    final timeStr = ' ${newDateTime.hour.toString().padLeft(2, '0')}:${newDateTime.minute.toString().padLeft(2, '0')}:00';
-    final fullDateTimeStr = '$dateStr$timeStr';
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    bool success = false;
-    try {
-      final response = await AppointmentService.updateAppointment({
-        'id': appointment.id,
-        'appointmentDate': fullDateTimeStr,
-        'procedureText': appointment.procedureText,
-        'status': appointment.status,
-      }).timeout(const Duration(seconds: 8));
-
-      success = response.statusCode == 200;
-    } catch (_) {}
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? 'Appointment rescheduled successfully.' : 'Failed to reschedule appointment.'),
-          backgroundColor: success ? AppTheme.emeraldSuccess : AppTheme.redDestructive,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      if (success) {
-        _loadData();
-      } else {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _confirmAndDeleteAppointment(AppointmentModel appointment) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete Appointment?'),
-        content: const Text('Are you sure you want to permanently delete this appointment slot?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.secondarySlate)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: AppTheme.redDestructive, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true || !mounted) return;
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    bool success = false;
-    try {
-      final response = await AppointmentService.deleteAppointment(appointment.id)
-          .timeout(const Duration(seconds: 8));
-      success = response.statusCode == 200;
-    } catch (_) {}
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? 'Appointment deleted successfully.' : 'Failed to delete appointment.'),
-          backgroundColor: success ? AppTheme.emeraldSuccess : AppTheme.redDestructive,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      if (success) {
-        _loadData();
-      } else {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
   }
 
   Future<void> _loadData() async {
@@ -229,7 +65,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       }
     } catch (_) {}
 
-    // 2. Fetch Patients (for matching name & code)
+    // 2. Fetch Patients (for matching names & avatars)
     try {
       final response = await PatientService.getPatients(_parentId);
       if (response.statusCode == 200) {
@@ -241,15 +77,66 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       }
     } catch (_) {}
 
-    // 3. Fetch Appointments directly from backend database
+    // 3. Fetch Appointments for the selected range
+    await _fetchAppointmentsForRange();
+  }
+
+  Future<void> _fetchAppointmentsForRange() async {
     List<AppointmentModel> fetchedAppts = [];
+    String? fromStr;
+    String? toStr;
+
+    if (_selectedRange == 'custom' && _customDateRange != null) {
+      final start = _customDateRange!.start;
+      final end = _customDateRange!.end;
+      fromStr = '${start.year}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
+      toStr = '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
+    }
+
     try {
-      final response = await AppointmentService.getAppointments(_doctorId).timeout(const Duration(seconds: 8));
+      final response = await AppointmentService.getAppointments(
+        _doctorId,
+        range: _selectedRange,
+        from: fromStr,
+        to: toStr,
+      ).timeout(const Duration(seconds: 8));
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
         if (responseData['statusCode'] == 200 && responseData['body'] is List) {
           final list = responseData['body'] as List;
-          fetchedAppts = list.map((json) => AppointmentModel.fromJson(json)).toList();
+          fetchedAppts = list.map((json) {
+            final appt = AppointmentModel.fromJson(json);
+            // If patient name exists in payload from join, update patient if needed
+            if (json['patient_name'] != null && json['patient_name'].toString().isNotEmpty) {
+              final existingPatient = _getPatient(appt.patientId);
+              if (existingPatient == null) {
+                _patients.add(PatientModel(
+                  id: appt.patientId,
+                  parentId: _parentId,
+                  patientCode: json['patient_code'] ?? 'PAT-${appt.patientId}',
+                  profileImage: json['patient_image'] ?? '',
+                  fullName: json['patient_name'],
+                  age: 0,
+                  gender: '',
+                  dateOfBirth: '',
+                  phone: json['patient_phone'] ?? '',
+                  email: '',
+                  address: '',
+                  medicalConditions: [],
+                  emergencyContactName: '',
+                  emergencyContactPhone: '',
+                  totalVisits: 0,
+                  lastVisitDate: '',
+                  createdBy: _doctorId,
+                  status: true,
+                  createdAt: '',
+                  updatedAt: '',
+                ));
+              }
+            }
+            return appt;
+          }).toList();
         }
       }
     } catch (_) {}
@@ -257,10 +144,12 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     // Sort by date ascending
     fetchedAppts.sort((a, b) => a.appointmentDate.compareTo(b.appointmentDate));
 
-    setState(() {
-      _appointments = fetchedAppts;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _appointments = fetchedAppts;
+        _isLoading = false;
+      });
+    }
   }
 
   PatientModel? _getPatient(int id) {
@@ -271,32 +160,44 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     }
   }
 
-  // Group appointments into Today, Tomorrow, Upcoming
-  Map<String, List<AppointmentModel>> _groupAppointments() {
-    final now = DateTime.now();
-    final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    
-    final tomorrow = now.add(const Duration(days: 1));
-    final tomorrowStr = '${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}';
+  Future<void> _pickDateRange(BuildContext context) async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: _customDateRange ?? DateTimeRange(
+        start: DateTime.now(),
+        end: DateTime.now().add(const Duration(days: 7)),
+      ),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.tealAccent,
+              onPrimary: Colors.white,
+              onSurface: AppTheme.primarySlate,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
 
-    final List<AppointmentModel> todayList = [];
-    final List<AppointmentModel> tomorrowList = [];
-    final List<AppointmentModel> upcomingList = [];
-    final List<AppointmentModel> passedList = [];
+    if (picked != null) {
+      setState(() {
+        _selectedRange = 'custom';
+        _customDateRange = picked;
+        _isLoading = true;
+      });
+      await _fetchAppointmentsForRange();
+    }
+  }
+
+  // Group appointments into Section Headers
+  Map<String, List<AppointmentModel>> _groupAppointments() {
+    final Map<String, List<AppointmentModel>> groups = {};
 
     final filteredAppts = _appointments.where((appt) {
-      if (_selectedDateRange != null) {
-        try {
-          final apptDate = DateTime.parse(appt.appointmentDate);
-          final dateOnly = DateTime(apptDate.year, apptDate.month, apptDate.day);
-          final startOnly = DateTime(_selectedDateRange!.start.year, _selectedDateRange!.start.month, _selectedDateRange!.start.day);
-          final endOnly = DateTime(_selectedDateRange!.end.year, _selectedDateRange!.end.month, _selectedDateRange!.end.day);
-          if (dateOnly.isBefore(startOnly) || dateOnly.isAfter(endOnly)) {
-            return false;
-          }
-        } catch (_) {}
-      }
-
       if (_searchQuery.trim().isNotEmpty) {
         final query = _searchQuery.trim().toLowerCase();
         final patient = _getPatient(appt.patientId);
@@ -307,35 +208,54 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           return false;
         }
       }
-
       return true;
     }).toList();
 
+    final now = DateTime.now();
+    final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final tomorrow = now.add(const Duration(days: 1));
+    final tomorrowStr = '${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}';
+
     for (final appt in filteredAppts) {
+      String dateKey = 'Upcoming';
       if (appt.appointmentDate.length >= 10) {
         final dateStr = appt.appointmentDate.substring(0, 10);
         if (dateStr == todayStr) {
-          todayList.add(appt);
+          dateKey = 'Today — ${_formatDate(now)}';
         } else if (dateStr == tomorrowStr) {
-          tomorrowList.add(appt);
-        } else if (appt.appointmentDate.compareTo(todayStr) < 0) {
-          passedList.add(appt);
+          dateKey = 'Tomorrow — ${_formatDate(tomorrow)}';
         } else {
-          upcomingList.add(appt);
+          try {
+            final dt = DateTime.parse(dateStr);
+            dateKey = _formatDate(dt);
+          } catch (_) {
+            dateKey = dateStr;
+          }
         }
-      } else {
-        upcomingList.add(appt);
       }
+      groups.putIfAbsent(dateKey, () => []).add(appt);
     }
 
-    return {
-      'Today': todayList,
-      'Tomorrow': tomorrowList,
-      'Upcoming': upcomingList,
-      'Passed / Archived': passedList,
-    };
+    return groups;
   }
 
+  void _openDetailScreen(AppointmentModel appt, PatientModel? patient) async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AppointmentDetailScreen(
+          appointment: appt,
+          patient: patient,
+          doctorId: _doctorId,
+          parentId: _parentId,
+        ),
+      ),
+    );
+
+    if (result == true) {
+      _loadData();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -350,20 +270,10 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: AppTheme.primarySlate,
-        actions: [
-          IconButton(
-            icon: Icon(
-              _selectedDateRange != null ? Icons.date_range : Icons.date_range_outlined,
-              color: _selectedDateRange != null ? AppTheme.tealAccent : null,
-            ),
-            tooltip: 'Filter by Date Range',
-            onPressed: () => _pickDateRange(context),
-          ),
-        ],
       ),
       body: Column(
         children: [
-          // Search Input Bar
+          // 1. Search Input Bar
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
@@ -398,212 +308,302 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
               ),
             ),
           ),
-          if (_selectedDateRange != null)
-            Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+
+          // 2. Range Filter Chips Row
+          Container(
+            width: double.infinity,
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  const Icon(Icons.filter_alt_outlined, size: 16, color: AppTheme.tealAccent),
+                  _buildFilterChip('All', 'all'),
                   const SizedBox(width: 8),
-                  Text(
-                    'Range: ${_formatDate(_selectedDateRange!.start)} - ${_formatDate(_selectedDateRange!.end)}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primarySlate),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedDateRange = null;
-                      });
-                    },
-                    child: const Icon(Icons.cancel, size: 18, color: AppTheme.secondarySlate),
+                  _buildFilterChip('Today', 'today'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('Tomorrow', 'tomorrow'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('This week', 'week'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip(
+                    _selectedRange == 'custom' && _customDateRange != null
+                        ? '${_formatDate(_customDateRange!.start).substring(0, 6)} - ${_formatDate(_customDateRange!.end).substring(0, 6)}'
+                        : 'Custom',
+                    'custom',
+                    icon: Icons.date_range_outlined,
                   ),
                 ],
               ),
             ),
+          ),
+
+          // 3. Appointments Content with AnimatedSwitcher
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.tealAccent))
-                : !hasAppointments
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.calendar_today_outlined, size: 64, color: AppTheme.secondarySlate.withValues(alpha: 0.3)),
-                            const SizedBox(height: 16),
-                            Text(
-                              _searchQuery.isNotEmpty
-                                  ? 'No appointments found matching "$_searchQuery".'
-                                  : _selectedDateRange != null
-                                      ? 'No appointments scheduled in selected range.'
-                                      : 'No appointments scheduled yet.',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.secondarySlate),
-                            ),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        color: AppTheme.tealAccent,
-                        onRefresh: _loadData,
-                        child: ListView(
-                          padding: const EdgeInsets.all(20),
-                          children: groups.keys.map((title) {
-                            final list = groups[title]!;
-                            if (list.isEmpty) return const SizedBox.shrink();
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 0.03),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+              child: _isLoading
+                  ? const Center(key: ValueKey('loading'), child: CircularProgressIndicator(color: AppTheme.tealAccent))
+                  : !hasAppointments
+                      ? Center(
+                          key: ValueKey('empty_${_selectedRange}_$_searchQuery'),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.calendar_today_outlined, size: 64, color: AppTheme.secondarySlate.withValues(alpha: 0.3)),
+                              const SizedBox(height: 16),
+                              Text(
+                                _searchQuery.isNotEmpty
+                                    ? 'No appointments matching "$_searchQuery".'
+                                    : 'No appointments scheduled for this filter.',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.secondarySlate),
+                              ),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          key: ValueKey('list_${_selectedRange}_${_appointments.length}'),
+                          color: AppTheme.tealAccent,
+                          onRefresh: _loadData,
+                          child: ListView(
+                            padding: const EdgeInsets.all(20),
+                            children: groups.keys.map((title) {
+                              final list = groups[title]!;
+                              if (list.isEmpty) return const SizedBox.shrink();
 
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8.0, bottom: 12.0),
-                                  child: Text(
-                                    title.toUpperCase(),
-                                    style: textTheme.labelLarge?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: title == 'Today'
-                                          ? AppTheme.tealAccent
-                                          : title == 'Tomorrow'
-                                              ? AppTheme.primarySlate
-                                              : AppTheme.secondarySlate,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ),
-                                ...list.map((appt) {
-                                  final patient = _getPatient(appt.patientId);
-                                  final patientName = patient?.fullName ?? 'Unknown Patient';
-                                  final patientCode = patient?.patientCode ?? 'N/A';
-
-                                  // Format Date & Time
-                                  String displayTime = '';
-                                  if (appt.appointmentDate.length >= 16) {
-                                    displayTime = appt.appointmentDate.substring(11, 16); // e.g. 10:30
-                                  }
-
-                                  return Card(
-                                    margin: const EdgeInsets.only(bottom: 16),
-                                    elevation: 0,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                      side: const BorderSide(color: Color(0xFFE2E8F0)),
-                                    ),
-                                    color: Colors.white,
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  patientName,
-                                                  style: textTheme.titleMedium?.copyWith(
-                                                    fontWeight: FontWeight.bold,
-                                                    color: AppTheme.primarySlate,
-                                                  ),
-                                                ),
-                                              ),
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFFF1F5F9),
-                                                  borderRadius: BorderRadius.circular(8),
-                                                ),
-                                                child: Text(
-                                                  displayTime.isNotEmpty ? displayTime : '10:00',
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 12,
-                                                    color: AppTheme.primarySlate,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'Code: $patientCode • Date: ${appt.appointmentDate.substring(0, 10)}',
-                                            style: textTheme.bodySmall?.copyWith(color: AppTheme.secondarySlate),
-                                          ),
-                                          const Divider(height: 24, color: Color(0xFFF1F5F9)),
-                                          Row(
-                                            children: [
-                                              const Icon(Icons.settings_outlined, size: 14, color: AppTheme.tealAccent),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: Text(
-                                                  'Procedure: ${appt.procedureText}',
-                                                  style: textTheme.bodyMedium?.copyWith(
-                                                    fontWeight: FontWeight.w600,
-                                                    color: AppTheme.primarySlate,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 12),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.end,
-                                            children: [
-                                              IconButton(
-                                                onPressed: () => _confirmAndDeleteAppointment(appt),
-                                                icon: const Icon(Icons.delete_outline, color: AppTheme.redDestructive),
-                                                tooltip: 'Delete Appointment',
-                                              ),
-                                              const SizedBox(width: 8),
-                                              OutlinedButton.icon(
-                                                onPressed: () => _rescheduleAppointment(appt),
-                                                icon: const Icon(Icons.edit_calendar_outlined, size: 16),
-                                                label: const Text('Reschedule', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                                style: OutlinedButton.styleFrom(
-                                                  foregroundColor: AppTheme.tealAccent,
-                                                  side: const BorderSide(color: AppTheme.tealAccent),
-                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              OutlinedButton.icon(
-                                                onPressed: () {
-                                                  if (patient != null) {
-                                                    Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder: (context) => PatientDetailsScreen(patient: patient),
-                                                      ),
-                                                    );
-                                                  }
-                                                },
-                                                icon: const Icon(Icons.folder_open_outlined, size: 16),
-                                                label: const Text('View Case File', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                                style: OutlinedButton.styleFrom(
-                                                  foregroundColor: AppTheme.tealAccent,
-                                                  side: const BorderSide(color: AppTheme.tealAccent),
-                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8.0, bottom: 12.0),
+                                    child: Text(
+                                      title.toUpperCase(),
+                                      style: textTheme.labelLarge?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: title.startsWith('Today')
+                                            ? AppTheme.tealAccent
+                                            : AppTheme.primarySlate,
+                                        letterSpacing: 0.5,
                                       ),
                                     ),
-                                  );
-                                }),
-                                const SizedBox(height: 12),
-                              ],
-                            );
-                          }).toList(),
+                                  ),
+                                  ...list.map((appt) {
+                                    final patient = _getPatient(appt.patientId);
+                                    return _AppointmentCardItem(
+                                      appointment: appt,
+                                      patient: patient,
+                                      onTap: () => _openDetailScreen(appt, patient),
+                                    );
+                                  }),
+                                  const SizedBox(height: 12),
+                                ],
+                              );
+                            }).toList(),
+                          ),
                         ),
-                      ),
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, String key, {IconData? icon}) {
+    final isSelected = _selectedRange == key;
+    return ChoiceChip(
+      avatar: icon != null ? Icon(icon, size: 16, color: isSelected ? Colors.white : AppTheme.secondarySlate) : null,
+      label: Text(
+        label,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 13,
+          color: isSelected ? Colors.white : AppTheme.primarySlate,
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: AppTheme.tealAccent,
+      backgroundColor: const Color(0xFFF1F5F9),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: (val) {
+        if (key == 'custom') {
+          _pickDateRange(context);
+        } else if (val && _selectedRange != key) {
+          setState(() {
+            _selectedRange = key;
+            _isLoading = true;
+          });
+          _fetchAppointmentsForRange();
+        }
+      },
+    );
+  }
+}
+
+/// Simplified Appointment Card Item with tap scale feedback and clamped procedure text.
+class _AppointmentCardItem extends StatefulWidget {
+  final AppointmentModel appointment;
+  final PatientModel? patient;
+  final VoidCallback onTap;
+
+  const _AppointmentCardItem({
+    required this.appointment,
+    required this.patient,
+    required this.onTap,
+  });
+
+  @override
+  State<_AppointmentCardItem> createState() => _AppointmentCardItemState();
+}
+
+class _AppointmentCardItemState extends State<_AppointmentCardItem> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final patientName = widget.patient?.fullName ?? 'Patient #${widget.appointment.patientId}';
+    final patientCode = widget.patient?.patientCode ?? 'PAT-${widget.appointment.patientId}';
+
+    String displayTime = '10:00 AM';
+    if (widget.appointment.appointmentDate.length >= 16) {
+      try {
+        final dt = DateTime.parse(widget.appointment.appointmentDate);
+        final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+        final minute = dt.minute.toString().padLeft(2, '0');
+        final period = dt.hour >= 12 ? 'PM' : 'AM';
+        displayTime = '$hour:$minute $period';
+      } catch (_) {
+        displayTime = widget.appointment.appointmentDate.substring(11, 16);
+      }
+    }
+
+    final isCompleted = widget.appointment.status.toLowerCase() == 'completed';
+    final isCancelled = widget.appointment.status.toLowerCase() == 'cancelled';
+
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.98 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        child: Card(
+          margin: const EdgeInsets.only(bottom: 14),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFFE2E8F0)),
+          ),
+          color: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Hero(
+                            tag: 'patient_avatar_${widget.appointment.patientId}',
+                            child: CircleAvatar(
+                              radius: 18,
+                              backgroundColor: const Color(0xFFE0F2F1),
+                              backgroundImage: (widget.patient?.profileImage.isNotEmpty ?? false)
+                                  ? NetworkImage(widget.patient!.profileImage)
+                                  : null,
+                              child: (widget.patient?.profileImage.isEmpty ?? true)
+                                  ? Text(
+                                      patientName.isNotEmpty ? patientName[0].toUpperCase() : 'P',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.tealAccent),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  patientName,
+                                  style: textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.primarySlate,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  'Code: $patientCode • Date: ${widget.appointment.appointmentDate.substring(0, 10)}',
+                                  style: textTheme.bodySmall?.copyWith(color: AppTheme.secondarySlate, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Time Badge Pill
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isCompleted
+                            ? AppTheme.emeraldSuccess.withValues(alpha: 0.12)
+                            : isCancelled
+                                ? AppTheme.redDestructive.withValues(alpha: 0.12)
+                                : AppTheme.tealAccent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        displayTime,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: isCompleted
+                              ? AppTheme.emeraldSuccess
+                              : isCancelled
+                                  ? AppTheme.redDestructive
+                                  : AppTheme.tealAccent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (widget.appointment.procedureText.trim().isNotEmpty) ...[
+                  const Divider(height: 20, color: Color(0xFFF1F5F9)),
+                  Text(
+                    'Procedure: ${widget.appointment.procedureText}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.primarySlate,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

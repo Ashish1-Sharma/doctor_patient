@@ -36,7 +36,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   double _totalEarnings = 0.0;
   int _pendingPaymentsCount = 0;
-  int _appointmentsCount = 0;
+  int _appointmentsTodayCount = 0;
+  int _appointmentsUpcomingCount = 0;
 
   bool _isAddButtonPressed = false;
   bool _isAddButtonHovered = false;
@@ -91,19 +92,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Fetch visits and payments dynamically
     await _fetchVisitsAndPaymentsFromApi();
 
-    // Fetch appointments count from API
+    // Fetch appointment stats from API
     try {
-      final response = await AppointmentService.getAppointments(_loggedInUserId!).timeout(const Duration(seconds: 5));
+      final response = await AppointmentService.getAppointmentStats(_loggedInUserId!).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
-        if (responseData['statusCode'] == 200 && responseData['body'] is List) {
-          final list = responseData['body'] as List;
+        if (responseData['statusCode'] == 200 && responseData['body'] != null) {
+          final body = responseData['body'];
           setState(() {
-            _appointmentsCount = list.length;
+            _appointmentsTodayCount = body['appointments_today'] is int ? body['appointments_today'] : (int.tryParse(body['appointments_today'].toString()) ?? 0);
+            _appointmentsUpcomingCount = body['appointments_upcoming_total'] is int ? body['appointments_upcoming_total'] : (int.tryParse(body['appointments_upcoming_total'].toString()) ?? 0);
           });
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      try {
+        final response = await AppointmentService.getAppointments(_loggedInUserId!).timeout(const Duration(seconds: 5));
+        if (response.statusCode == 200) {
+          final Map<String, dynamic> responseData = jsonDecode(response.body);
+          if (responseData['statusCode'] == 200 && responseData['body'] is List) {
+            final list = responseData['body'] as List;
+            final appts = list.map((json) => AppointmentModel.fromJson(json)).toList();
+            final now = DateTime.now();
+            final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+            int todayCount = 0;
+            int upcomingCount = 0;
+            for (var a in appts) {
+              if (a.status.toLowerCase() == 'cancelled') continue;
+              final aDate = a.appointmentDate.length >= 10 ? a.appointmentDate.substring(0, 10) : a.appointmentDate;
+              if (aDate == todayStr) todayCount++;
+              if (aDate.compareTo(todayStr) >= 0) upcomingCount++;
+            }
+            setState(() {
+              _appointmentsTodayCount = todayCount;
+              _appointmentsUpcomingCount = upcomingCount;
+            });
+          }
+        }
+      } catch (_) {}
+    }
   }
 
 
@@ -526,8 +553,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             Expanded(
                               child: StatCard(
                                 title: 'Appointments',
-                                primaryValue: '$_appointmentsCount',
-                                secondaryText: 'Tap to view scheduler',
+                                primaryValue: '$_appointmentsTodayCount Today',
+                                secondaryText: '$_appointmentsUpcomingCount Upcoming total',
                                 icon: Icons.calendar_today_outlined,
                                 gradient: AppTheme.appointmentCardGradient,
                                 quickLinks: const ['Schedules', 'Calendar'],
@@ -583,8 +610,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           StatCard(
                             title: 'Appointments',
-                            primaryValue: '$_appointmentsCount',
-                            secondaryText: 'Tap to view scheduler',
+                            primaryValue: '$_appointmentsTodayCount Today',
+                            secondaryText: '$_appointmentsUpcomingCount Upcoming total',
                             icon: Icons.calendar_today_outlined,
                             gradient: AppTheme.appointmentCardGradient,
                             quickLinks: const ['Schedules', 'Calendar'],

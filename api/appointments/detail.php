@@ -5,7 +5,7 @@ ini_set('display_errors', 1);
 
 header('Access-Control-Allow-Origin: *');
 header('Content-Type: application/json');
-header('Access-Control-Allow-Methods: POST');
+header('Access-Control-Allow-Methods: POST, GET');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 include_once('../../config/database.php');
@@ -26,24 +26,21 @@ function sendResponse($statusCode, $message, $body = null)
     ]);
 }
 
-if (isset($data) && isset($data->doctorId)) {
+$id = $data->id ?? $_GET['id'] ?? null;
+
+if ($id) {
     try {
-        $range = $data->range ?? 'all';
-        $from = $data->from ?? null;
-        $to = $data->to ?? null;
-
-        if ($range === 'all') {
-            $list = $appointment->getByDoctorIdAndRange($data->doctorId, 'all');
+        $detail = $appointment->getById($id);
+        if ($detail) {
+            sendResponse(200, 'Appointment detail loaded successfully', $detail);
         } else {
-            $list = $appointment->getByDoctorIdAndRange($data->doctorId, $range, $from, $to);
+            sendResponse(404, 'Appointment not found');
         }
-
-        sendResponse(200, 'Appointments loaded successfully', $list);
     } catch (Exception $e) {
-        sendResponse(500, 'Error loading appointments', [
+        sendResponse(500, 'Error loading appointment detail', [
             'error' => $e->getMessage()
         ]);
     }
 } else {
-    sendResponse(400, 'Invalid request: doctorId is required');
+    sendResponse(400, 'Invalid request: appointment ID is required');
 }
