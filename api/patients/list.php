@@ -26,11 +26,21 @@ function sendResponse($statusCode, $message, $body = null)
     ]);
 }
 
-if (isset($data->parentId)) {
+$targetParentId = $data->parentId ?? $data->doctorId ?? null;
+
+if ($targetParentId) {
 
     try {
+        // Resolve parentId if a sub-user ID was supplied
+        $parentQuery = "SELECT id, parentId FROM registration WHERE id = ? LIMIT 1";
+        $parentStmt = $db->prepare($parentQuery);
+        $parentStmt->execute([(int)$targetParentId]);
+        $userRow = $parentStmt->fetch(PDO::FETCH_ASSOC);
+        if ($userRow && !empty($userRow['parentId'])) {
+            $targetParentId = (int)$userRow['parentId'];
+        }
 
-        $result = $patient->getPatients($data->parentId);
+        $result = $patient->getPatients($targetParentId);
 
         if ($result->rowCount() > 0) {
 

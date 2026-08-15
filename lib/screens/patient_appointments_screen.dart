@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/patient_model.dart';
 import '../models/appointment_model.dart';
 import '../services/appointment_service.dart';
@@ -25,14 +27,42 @@ class PatientAppointmentsScreen extends StatefulWidget {
 class _PatientAppointmentsScreenState extends State<PatientAppointmentsScreen> {
   late List<AppointmentModel> _localAppointments;
   bool _isLoading = false;
+  bool _isSubUser = false;
 
   @override
   void initState() {
     super.initState();
     _localAppointments = List.from(widget.appointments);
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final profileStr = prefs.getString('user_profile');
+      if (profileStr != null) {
+        final profile = jsonDecode(profileStr);
+        if (mounted) {
+          setState(() {
+            _isSubUser = profile['isSubUser'] == true;
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _confirmAndDeleteAppointment(AppointmentModel appointment) async {
+    if (_isSubUser) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access Denied: Only Admin has permission to delete appointments.'),
+          backgroundColor: AppTheme.redDestructive,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -248,13 +278,15 @@ class _PatientAppointmentsScreenState extends State<PatientAppointmentsScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: AppTheme.redDestructive, size: 20),
-                      onPressed: () => _confirmAndDeleteAppointment(appt),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
+                    if (!_isSubUser) ...[
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: AppTheme.redDestructive, size: 20),
+                        onPressed: () => _confirmAndDeleteAppointment(appt),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
                   ],
                 ),
               ],

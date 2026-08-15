@@ -63,7 +63,7 @@ class _PatientRegistryScreenState extends State<PatientRegistryScreen> {
 
     // Fetch once when screen opens
     if (mounted) {
-      Provider.of<PatientProvider>(context, listen: false).fetchPatients(_doctorId);
+      Provider.of<PatientProvider>(context, listen: false).fetchPatients(_parentId);
     }
   }
 
@@ -172,7 +172,7 @@ class _PatientRegistryScreenState extends State<PatientRegistryScreen> {
     );
 
     if (didCreate == true && mounted) {
-      Provider.of<PatientProvider>(context, listen: false).fetchPatients(_doctorId);
+      Provider.of<PatientProvider>(context, listen: false).fetchPatients(_parentId);
     }
   }
 
@@ -284,7 +284,7 @@ class _PatientRegistryScreenState extends State<PatientRegistryScreen> {
                     )
                   : RefreshIndicator(
                       color: AppTheme.tealAccent,
-                      onRefresh: () => provider.fetchPatients(_doctorId),
+                      onRefresh: () => provider.fetchPatients(_parentId),
                       child: filteredPatients.isEmpty
                           ? ListView(
                               children: [
@@ -328,7 +328,7 @@ class _PatientRegistryScreenState extends State<PatientRegistryScreen> {
                                       ),
                                     );
                                     if (result == true && mounted) {
-                                      provider.fetchPatients(_doctorId);
+                                      provider.fetchPatients(_parentId);
                                     }
                                   },
                                   borderRadius: BorderRadius.circular(20),

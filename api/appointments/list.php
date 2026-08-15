@@ -26,16 +26,18 @@ function sendResponse($statusCode, $message, $body = null)
     ]);
 }
 
-if (isset($data) && isset($data->doctorId)) {
+$targetId = $data->doctorId ?? $data->parentId ?? null;
+
+if (isset($data) && $targetId) {
     try {
         $range = $data->range ?? 'all';
         $from = $data->from ?? null;
         $to = $data->to ?? null;
 
         if ($range === 'all') {
-            $list = $appointment->getByDoctorIdAndRange($data->doctorId, 'all');
+            $list = $appointment->getByDoctorIdAndRange($targetId, 'all');
         } else {
-            $list = $appointment->getByDoctorIdAndRange($data->doctorId, $range, $from, $to);
+            $list = $appointment->getByDoctorIdAndRange($targetId, $range, $from, $to);
         }
 
         sendResponse(200, 'Appointments loaded successfully', $list);
@@ -45,5 +47,5 @@ if (isset($data) && isset($data->doctorId)) {
         ]);
     }
 } else {
-    sendResponse(400, 'Invalid request: doctorId is required');
+    sendResponse(400, 'Invalid request: doctorId or parentId is required');
 }

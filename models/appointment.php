@@ -135,13 +135,24 @@ class Appointment
     }
 
     /**
-     * Get Appointments by Doctor ID & Date Range (today, tomorrow, week, custom, all)
+     * Get Appointments by Doctor ID / Parent ID & Date Range (today, tomorrow, week, custom, all)
      */
     public function getByDoctorIdAndRange($doctorId, $range = 'all', $from = null, $to = null)
     {
         try {
-            $whereClause = "WHERE a.doctor_id = :doctorId";
-            $params = [':doctorId' => $doctorId];
+            $effectiveParentId = (int)$doctorId;
+            $parentQuery = "SELECT id, parentId FROM registration WHERE id = ? LIMIT 1";
+            $parentStmt = $this->connection->prepare($parentQuery);
+            $parentStmt->execute([(int)$doctorId]);
+            $userRow = $parentStmt->fetch(PDO::FETCH_ASSOC);
+            if ($userRow && !empty($userRow['parentId'])) {
+                $effectiveParentId = (int)$userRow['parentId'];
+            }
+
+            $whereClause = "WHERE (a.doctor_id = :effectiveParentId 
+                               OR a.doctor_id IN (SELECT id FROM registration WHERE parentId = :effectiveParentId)
+                               OR a.patient_id IN (SELECT id FROM patients WHERE parentId = :effectiveParentId))";
+            $params = [':effectiveParentId' => $effectiveParentId];
 
             switch ($range) {
                 case 'today':
@@ -183,26 +194,39 @@ class Appointment
     }
 
     /**
-     * Get Stats (Today count & Total Upcoming count) for Doctor
+     * Get Stats (Today count & Total Upcoming count) for Doctor / Clinic
      */
     public function getStatsByDoctorId($doctorId)
     {
         try {
-            $queryToday = "SELECT COUNT(*) as today_count FROM {$this->table} 
-                           WHERE doctor_id = :doctorId 
-                             AND DATE(appointment_date) = CURDATE() 
-                             AND (status IS NULL OR LOWER(status) != 'cancelled')";
+            $effectiveParentId = (int)$doctorId;
+            $parentQuery = "SELECT id, parentId FROM registration WHERE id = ? LIMIT 1";
+            $parentStmt = $this->connection->prepare($parentQuery);
+            $parentStmt->execute([(int)$doctorId]);
+            $userRow = $parentStmt->fetch(PDO::FETCH_ASSOC);
+            if ($userRow && !empty($userRow['parentId'])) {
+                $effectiveParentId = (int)$userRow['parentId'];
+            }
+
+            $queryToday = "SELECT COUNT(*) as today_count FROM {$this->table} a
+                           WHERE (a.doctor_id = :effectiveParentId 
+                              OR a.doctor_id IN (SELECT id FROM registration WHERE parentId = :effectiveParentId)
+                              OR a.patient_id IN (SELECT id FROM patients WHERE parentId = :effectiveParentId))
+                             AND DATE(a.appointment_date) = CURDATE() 
+                             AND (a.status IS NULL OR LOWER(a.status) != 'cancelled')";
             $stmtToday = $this->connection->prepare($queryToday);
-            $stmtToday->bindValue(":doctorId", $doctorId, PDO::PARAM_INT);
+            $stmtToday->bindValue(":effectiveParentId", $effectiveParentId, PDO::PARAM_INT);
             $stmtToday->execute();
             $todayRow = $stmtToday->fetch(PDO::FETCH_ASSOC);
 
-            $queryUpcoming = "SELECT COUNT(*) as upcoming_count FROM {$this->table} 
-                              WHERE doctor_id = :doctorId 
-                                AND DATE(appointment_date) >= CURDATE() 
-                                AND (status IS NULL OR LOWER(status) != 'cancelled')";
+            $queryUpcoming = "SELECT COUNT(*) as upcoming_count FROM {$this->table} a
+                              WHERE (a.doctor_id = :effectiveParentId 
+                                 OR a.doctor_id IN (SELECT id FROM registration WHERE parentId = :effectiveParentId)
+                                 OR a.patient_id IN (SELECT id FROM patients WHERE parentId = :effectiveParentId))
+                                AND DATE(a.appointment_date) >= CURDATE() 
+                                AND (a.status IS NULL OR LOWER(a.status) != 'cancelled')";
             $stmtUpcoming = $this->connection->prepare($queryUpcoming);
-            $stmtUpcoming->bindValue(":doctorId", $doctorId, PDO::PARAM_INT);
+            $stmtUpcoming->bindValue(":effectiveParentId", $effectiveParentId, PDO::PARAM_INT);
             $stmtUpcoming->execute();
             $upcomingRow = $stmtUpcoming->fetch(PDO::FETCH_ASSOC);
 

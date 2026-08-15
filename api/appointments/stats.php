@@ -26,7 +26,7 @@ function sendResponse($statusCode, $message, $body = null)
     ]);
 }
 
-$doctorId = $data->doctorId ?? $_GET['doctorId'] ?? null;
+$doctorId = $data->doctorId ?? $data->parentId ?? $_GET['doctorId'] ?? $_GET['parentId'] ?? null;
 
 if ($doctorId) {
     try {
@@ -38,5 +38,5 @@ if ($doctorId) {
         ]);
     }
 } else {
-    sendResponse(400, 'Invalid request: doctorId is required');
+    sendResponse(400, 'Invalid request: doctorId or parentId is required');
 }

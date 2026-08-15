@@ -89,7 +89,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
     });
 
     try {
-      final response = await VisitService.getVisits(_doctorId, _currentPatient.id)
+      final response = await VisitService.getVisits(_parentId, _currentPatient.id)
           .timeout(const Duration(seconds: 8));
       final Map<String, dynamic> responseData = jsonDecode(response.body);
 
@@ -125,7 +125,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
 
   Future<void> _fetchAppointments() async {
     try {
-      final response = await AppointmentService.getAppointments(_doctorId).timeout(const Duration(seconds: 8));
+      final response = await AppointmentService.getAppointments(_parentId).timeout(const Duration(seconds: 8));
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
         if (responseData['statusCode'] == 200 && responseData['body'] is List) {
@@ -144,7 +144,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
 
   Future<void> _fetchPayments() async {
     try {
-      final response = await PaymentService.getPayments(_doctorId).timeout(const Duration(seconds: 8));
+      final response = await PaymentService.getPayments(_parentId).timeout(const Duration(seconds: 8));
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
         if (responseData['statusCode'] == 200 && responseData['body'] is List) {
@@ -383,6 +383,17 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
   }
 
   Future<void> _confirmAndDeleteAppointment(AppointmentModel appointment) async {
+    if (_isSubUser) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access Denied: Only Admin has permission to delete appointments.'),
+          backgroundColor: AppTheme.redDestructive,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -427,7 +438,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
 
   Future<void> _refreshPatientDetails() async {
     try {
-      final response = await PatientService.getPatients(_doctorId);
+      final response = await PatientService.getPatients(_parentId);
       final Map<String, dynamic> responseData = jsonDecode(response.body);
       if (response.statusCode == 200 && responseData['statusCode'] == 200 && responseData['body'] is List) {
         final list = responseData['body'] as List;
@@ -1450,12 +1461,13 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            IconButton(
-                              onPressed: () => _confirmAndDeleteAppointment(appt),
-                              icon: const Icon(Icons.delete_outline, color: AppTheme.redDestructive, size: 20),
-                              tooltip: 'Delete Appointment',
-                            ),
-                            const SizedBox(width: 8),
+                            if (!_isSubUser)
+                              IconButton(
+                                onPressed: () => _confirmAndDeleteAppointment(appt),
+                                icon: const Icon(Icons.delete_outline, color: AppTheme.redDestructive, size: 20),
+                                tooltip: 'Delete Appointment',
+                              ),
+                            if (!_isSubUser) const SizedBox(width: 8),
                             ElevatedButton.icon(
                               onPressed: () => _rescheduleAppointment(appt),
                               icon: const Icon(Icons.edit_calendar_outlined, size: 14),

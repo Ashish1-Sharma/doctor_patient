@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/appointment_model.dart';
 import '../models/patient_model.dart';
 import '../services/appointment_service.dart';
@@ -39,11 +40,13 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
   bool _isLoadingPatient = false;
   bool _isSaving = false;
   bool _isDeleting = false;
+  bool _isSubUser = false;
 
   @override
   void initState() {
     super.initState();
     _patient = widget.patient;
+    _loadUserProfile();
 
     // Parse appointment datetime
     DateTime parsedDt;
@@ -60,6 +63,21 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
     if (_patient == null) {
       _fetchPatientDetails();
     }
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final profileStr = prefs.getString('user_profile');
+      if (profileStr != null) {
+        final profile = jsonDecode(profileStr);
+        if (mounted) {
+          setState(() {
+            _isSubUser = profile['isSubUser'] == true;
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   @override
@@ -235,6 +253,17 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
   }
 
   Future<void> _confirmAndDelete() async {
+    if (_isSubUser) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access Denied: Only Admin has permission to delete appointments.'),
+          backgroundColor: AppTheme.redDestructive,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -540,24 +569,26 @@ class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
               // 3. Action Buttons Row
               Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _isDeleting || _isSaving ? null : _confirmAndDelete,
-                      icon: _isDeleting
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: AppTheme.redDestructive, strokeWidth: 2))
-                          : const Icon(Icons.delete_outline, size: 18),
-                      label: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.redDestructive,
-                        side: const BorderSide(color: AppTheme.redDestructive),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  if (!_isSubUser) ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _isDeleting || _isSaving ? null : _confirmAndDelete,
+                        icon: _isDeleting
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: AppTheme.redDestructive, strokeWidth: 2))
+                            : const Icon(Icons.delete_outline, size: 18),
+                        label: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.redDestructive,
+                          side: const BorderSide(color: AppTheme.redDestructive),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
+                    const SizedBox(width: 16),
+                  ],
                   Expanded(
-                    flex: 2,
+                    flex: !_isSubUser ? 2 : 1,
                     child: ElevatedButton.icon(
                       onPressed: _isSaving || _isDeleting ? null : _saveChanges,
                       icon: _isSaving

@@ -94,7 +94,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Fetch appointment stats from API
     try {
-      final response = await AppointmentService.getAppointmentStats(_loggedInUserId!).timeout(const Duration(seconds: 5));
+      final response = await AppointmentService.getAppointmentStats(_parentId!).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
         if (responseData['statusCode'] == 200 && responseData['body'] != null) {
@@ -107,7 +107,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (_) {
       try {
-        final response = await AppointmentService.getAppointments(_loggedInUserId!).timeout(const Duration(seconds: 5));
+        final response = await AppointmentService.getAppointments(_parentId!).timeout(const Duration(seconds: 5));
         if (response.statusCode == 200) {
           final Map<String, dynamic> responseData = jsonDecode(response.body);
           if (responseData['statusCode'] == 200 && responseData['body'] is List) {

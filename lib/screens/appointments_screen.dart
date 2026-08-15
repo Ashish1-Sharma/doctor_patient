@@ -95,7 +95,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 
     try {
       final response = await AppointmentService.getAppointments(
-        _doctorId,
+        _parentId,
         range: _selectedRange,
         from: fromStr,
         to: toStr,

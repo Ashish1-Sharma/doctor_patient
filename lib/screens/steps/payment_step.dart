@@ -34,7 +34,7 @@ class _PaymentStepState extends State<PaymentStep> {
     _total = provider.payment.totalAmount;
     _paid = provider.payment.paidAmount;
 
-    if (_subtotal > 0) _subtotalController.text = _subtotal.toStringAsFixed(0);
+    _subtotalController.text = _subtotal.toStringAsFixed(0);
     if (_discount > 0) _discountController.text = _discount.toStringAsFixed(0);
     if (_paid > 0) _paidController.text = _paid.toStringAsFixed(0);
   }
@@ -174,7 +174,7 @@ class _PaymentStepState extends State<PaymentStep> {
                     validator: (val) {
                       if (val == null || val.trim().isEmpty) return 'Subtotal is mandatory';
                       final parsed = double.tryParse(val.trim());
-                      if (parsed == null || parsed <= 0) return 'Enter a valid amount';
+                      if (parsed == null || parsed < 0) return 'Enter a valid amount';
                       return null;
                     },
                   ),

@@ -88,8 +88,8 @@ class _NewTreatmentScreenState extends State<NewTreatmentScreen> {
         }
         break;
       case 4:
-        if (provider.payment.totalAmount <= 0) {
-          _showValidationError('Total Amount is mandatory.');
+        if (provider.payment.totalAmount < 0) {
+          _showValidationError('Total Amount cannot be negative.');
           return false;
         }
         if (provider.payment.paidAmount > provider.payment.totalAmount) {
