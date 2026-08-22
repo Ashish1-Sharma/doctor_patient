@@ -449,15 +449,35 @@ class _PatientRegistryScreenState extends State<PatientRegistryScreen> {
                                                   ),
                                                 ],
                                               ),
-                                              Row(
-                                                children: [
-                                                  const Icon(Icons.calendar_today_outlined, size: 16, color: AppTheme.secondarySlate),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    patient.lastVisitDate.isNotEmpty ? 'Last: ${patient.lastVisitDate}' : 'No visits yet',
-                                                    style: textTheme.bodyMedium?.copyWith(color: AppTheme.primarySlate),
-                                                  ),
-                                                ],
+                                              // Outstanding balance, or a settled confirmation
+                                              Builder(
+                                                builder: (context) {
+                                                  final bool hasPending = patient.pendingAmount > 0;
+                                                  final Color color = hasPending
+                                                      ? AppTheme.amberWarning
+                                                      : AppTheme.emeraldSuccess;
+                                                  return Row(
+                                                    children: [
+                                                      Icon(
+                                                        hasPending
+                                                            ? Icons.account_balance_wallet_outlined
+                                                            : Icons.check_circle_outline,
+                                                        size: 16,
+                                                        color: color,
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      Text(
+                                                        hasPending
+                                                            ? 'Pending: ₹${patient.pendingAmount.toStringAsFixed(0)}'
+                                                            : 'All settled',
+                                                        style: textTheme.bodyMedium?.copyWith(
+                                                          color: color,
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
                                               ),
                                             ],
                                           ),

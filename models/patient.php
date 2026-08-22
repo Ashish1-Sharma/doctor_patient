@@ -215,11 +215,28 @@ class Patient
      */
     public function getPatients($parentId)
     {
-        $query = "SELECT *
-                  FROM {$this->table}
-                  WHERE parentId = ?
-                  AND status = 1
-                  ORDER BY created_at DESC";
+        // total_visits / last_visit_date are stored columns that are only ever
+        // written at patient creation, so they go stale immediately. The three
+        // computed_* aggregates below derive the live values instead; list.php
+        // overlays them onto the stored columns before responding.
+        $query = "SELECT p.*,
+                    (SELECT COUNT(*)
+                       FROM visits v
+                      WHERE v.patient_id = p.id
+                        AND v.parentId = p.parentId) AS computed_total_visits,
+                    (SELECT DATE(MAX(v.visit_date))
+                       FROM visits v
+                      WHERE v.patient_id = p.id
+                        AND v.parentId = p.parentId) AS computed_last_visit_date,
+                    (SELECT COALESCE(SUM(pay.pending_amount), 0)
+                       FROM payments pay
+                      WHERE pay.patient_id = p.id
+                        AND pay.parentId = p.parentId
+                        AND LOWER(pay.payment_status) <> 'paid') AS computed_pending_amount
+                  FROM {$this->table} p
+                  WHERE p.parentId = ?
+                  AND p.status = 1
+                  ORDER BY p.created_at DESC";
 
         $stmt = $this->connection->prepare($query);
         $stmt->execute([$parentId]);

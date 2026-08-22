@@ -52,6 +52,17 @@ if ($targetParentId) {
                     ? json_decode($row['medical_conditions'], true)
                     : [];
 
+                // Overlay the live aggregates onto the stale stored columns
+                $row['total_visits'] = (int)($row['computed_total_visits'] ?? 0);
+                $row['last_visit_date'] = $row['computed_last_visit_date'] ?? '';
+                $row['pending_amount'] = (float)($row['computed_pending_amount'] ?? 0);
+
+                unset(
+                    $row['computed_total_visits'],
+                    $row['computed_last_visit_date'],
+                    $row['computed_pending_amount']
+                );
+
                 $patients[] = $row;
             }
 

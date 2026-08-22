@@ -16,6 +16,10 @@ class PatientModel {
   final String emergencyContactPhone;
   final int totalVisits;
   final String lastVisitDate;
+
+  /// Outstanding balance across all of this patient's non-paid invoices.
+  /// Computed server-side by patients/list.php; defaults to 0 elsewhere.
+  final double pendingAmount;
   final int createdBy;
   final bool status;
   final String createdAt;
@@ -38,6 +42,7 @@ class PatientModel {
     required this.emergencyContactPhone,
     required this.totalVisits,
     required this.lastVisitDate,
+    this.pendingAmount = 0.0,
     required this.createdBy,
     required this.status,
     required this.createdAt,
@@ -49,6 +54,12 @@ class PatientModel {
       if (val == null) return 0;
       if (val is int) return val;
       return int.tryParse(val.toString()) ?? 0;
+    }
+
+    double parseAmount(dynamic val) {
+      if (val == null) return 0.0;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? 0.0;
     }
 
     return PatientModel(
@@ -74,6 +85,7 @@ class PatientModel {
       emergencyContactPhone: json['emergencyContactPhone'] as String? ?? json['emergency_contact_phone'] as String? ?? '',
       totalVisits: parseId(json['totalVisits'] ?? json['total_visits']),
       lastVisitDate: json['lastVisitDate'] as String? ?? json['last_visit_date'] as String? ?? '',
+      pendingAmount: parseAmount(json['pendingAmount'] ?? json['pending_amount']),
       createdBy: parseId(json['createdBy'] ?? json['created_by']),
       status: json['status'] is int
           ? (json['status'] as int) == 1
@@ -103,6 +115,7 @@ class PatientModel {
       'emergencyContactPhone': emergencyContactPhone,
       'totalVisits': totalVisits,
       'lastVisitDate': lastVisitDate,
+      'pendingAmount': pendingAmount,
       'createdBy': createdBy,
       'status': status,
       'createdAt': createdAt,
