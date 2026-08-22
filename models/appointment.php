@@ -24,11 +24,37 @@ class Appointment
     }
 
     /**
-     * Create Appointment
+     * Create or Update Appointment for a Visit
      */
     public function create($params)
     {
         try {
+            if (!empty($params["visitId"])) {
+                $checkQuery = "SELECT id FROM {$this->table} WHERE visit_id = :visitId LIMIT 1";
+                $checkStmt = $this->connection->prepare($checkQuery);
+                $checkStmt->bindValue(":visitId", $params["visitId"], PDO::PARAM_INT);
+                $checkStmt->execute();
+                $existing = $checkStmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($existing) {
+                    $updateQuery = "UPDATE {$this->table}
+                                    SET appointment_date = :appointmentDate,
+                                        procedure_text = :procedureText,
+                                        doctor_id = :doctorId,
+                                        patient_id = :patientId
+                                    WHERE id = :id";
+                    $updateStmt = $this->connection->prepare($updateQuery);
+                    $updateStmt->bindValue(":appointmentDate", $params["appointmentDate"]);
+                    $updateStmt->bindValue(":procedureText", $params["procedureText"]);
+                    $updateStmt->bindValue(":doctorId", $params["doctorId"]);
+                    $updateStmt->bindValue(":patientId", $params["patientId"]);
+                    $updateStmt->bindValue(":id", $existing["id"], PDO::PARAM_INT);
+                    if ($updateStmt->execute()) {
+                        return (int)$existing["id"];
+                    }
+                }
+            }
+
             $query = "INSERT INTO {$this->table}
             SET
                 visit_id = :visitId,
@@ -52,7 +78,7 @@ class Appointment
             }
             return 0;
         } catch (PDOException $e) {
-            throw new Exception("Error creating appointment: " . $e->getMessage());
+            throw new Exception("Error creating/updating appointment: " . $e->getMessage());
         }
     }
 

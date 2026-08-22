@@ -67,7 +67,7 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
   Future<void> _fetchFromBackend() async {
     try {
       final response = await http.post(
-        Uri.parse('https://tworingz.com/doctor_patient/api/company/getCompanyDetails.php'),
+        Uri.parse('https://jayadurgadentalhomeo.com/api/api/company/getCompanyDetails.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'userId': _doctorId}),
       );
@@ -119,7 +119,7 @@ class _CompanyDetailsScreenState extends State<CompanyDetailsScreen> {
     bool success = false;
     try {
       final response = await http.post(
-        Uri.parse('https://tworingz.com/doctor_patient/api/company/create.php'),
+        Uri.parse('https://jayadurgadentalhomeo.com/api/api/company/create.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(payload),
       ).timeout(const Duration(seconds: 8));

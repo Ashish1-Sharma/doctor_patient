@@ -66,10 +66,20 @@ if (isset($data->parentId) && isset($data->visitId)) {
                     : [];
             }
 
-            // 3. Fetch Company/Clinic details (by doctor_id)
-            $companyQuery = "SELECT * FROM company WHERE userId = :doctorId LIMIT 0,1";
+            // 3. Fetch Company/Clinic details (supports visits created by doctor owner or sub-user/staff)
+            $targetClinicId = !empty($visitRow['parentId']) ? $visitRow['parentId'] : ($data->parentId ?? $doctorId);
+
+            $companyQuery = "SELECT * FROM company 
+                             WHERE userId = :doctorId 
+                                OR userId = :targetClinicId 
+                                OR userId = (SELECT parentId FROM registration WHERE id = :doctorId AND parentId IS NOT NULL)
+                             ORDER BY CASE WHEN userId = :doctorId THEN 1 ELSE 2 END
+                             LIMIT 0,1";
             $companyStmt = $db->prepare($companyQuery);
-            $companyStmt->execute([':doctorId' => $doctorId]);
+            $companyStmt->execute([
+                ':doctorId' => $doctorId,
+                ':targetClinicId' => $targetClinicId
+            ]);
             $companyRow = null;
             if ($companyStmt->rowCount() > 0) {
                 $companyRow = $companyStmt->fetch(PDO::FETCH_ASSOC);

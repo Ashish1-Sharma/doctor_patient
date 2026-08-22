@@ -29,14 +29,7 @@ function sendResponse($statusCode, $message, $body = null)
 
 if (isset($data)) {
     try {
-        $result = $existingUser->updateSubUser(
-            $data->parentEmail,
-            $data->id,
-            $data->email,
-            $data->password,
-            $data->userName,
-            $data->userMobile
-        );
+        $result = $existingUser->updateSubUser($data->parentEmail, $data->id, $data->email, $data->password);
 
         if ($result) {
             sendResponse(200, 'User updated successfully');

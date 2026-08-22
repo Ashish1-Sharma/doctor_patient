@@ -125,7 +125,8 @@ class _InvoiceStepState extends State<InvoiceStep> {
 
     // Fetch and check if an appointment exists for this visit
     try {
-      final response = await AppointmentService.getAppointments(provider.visit.doctorId);
+      final targetId = provider.visit.parentId > 0 ? provider.visit.parentId : provider.visit.doctorId;
+      final response = await AppointmentService.getAppointments(targetId);
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
         if (responseData['statusCode'] == 200 && responseData['body'] is List) {
@@ -140,28 +141,32 @@ class _InvoiceStepState extends State<InvoiceStep> {
           );
 
           if (match.id != -1) {
-            DateTime? parsedDate;
+            DateTime? parsedDate = DateTime.tryParse(match.appointmentDate);
             TimeOfDay? parsedTime;
-            try {
-              final parts = match.appointmentDate.split(' ');
-              if (parts.length >= 2) {
-                final dateParts = parts[0].split('-');
-                final timeParts = parts[1].split(':');
-                if (dateParts.length == 3) {
-                  parsedDate = DateTime(
-                    int.parse(dateParts[0]),
-                    int.parse(dateParts[1]),
-                    int.parse(dateParts[2]),
-                  );
+            if (parsedDate == null) {
+              try {
+                final parts = match.appointmentDate.split(' ');
+                if (parts.length >= 2) {
+                  final dateParts = parts[0].split('-');
+                  final timeParts = parts[1].split(':');
+                  if (dateParts.length == 3) {
+                    parsedDate = DateTime(
+                      int.parse(dateParts[0]),
+                      int.parse(dateParts[1]),
+                      int.parse(dateParts[2]),
+                    );
+                  }
+                  if (timeParts.length >= 2) {
+                    parsedTime = TimeOfDay(
+                      hour: int.parse(timeParts[0]),
+                      minute: int.parse(timeParts[1]),
+                    );
+                  }
                 }
-                if (timeParts.length >= 2) {
-                  parsedTime = TimeOfDay(
-                    hour: int.parse(timeParts[0]),
-                    minute: int.parse(timeParts[1]),
-                  );
-                }
-              }
-            } catch (_) {}
+              } catch (_) {}
+            } else {
+              parsedTime = TimeOfDay.fromDateTime(parsedDate);
+            }
 
             setState(() {
               _addAppointment = true;

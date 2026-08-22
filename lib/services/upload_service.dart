@@ -6,7 +6,7 @@ import 'package:http_parser/http_parser.dart';
 
 /// Service to handle file uploading to revecosmetic.com.
 class UploadService {
-  static const String uploadUrl = 'https://revecosmetic.com/upload.php';
+  static const String uploadUrl = 'https://jayadurgadentalhomeo.com/upload.php';
 
   /// Uploads a selected XFile to the server and returns the image URL.
   /// Returns null if the upload fails.

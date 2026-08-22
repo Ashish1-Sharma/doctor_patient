@@ -553,6 +553,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
     if (result != null && mounted) {
       final updatedVisit = result['visit'] as VisitModel;
       final updatedPayment = result['payment'] as PaymentModel;
+      final updatedAppointment = result['appointment'] as AppointmentModel?;
 
       setState(() {
         _isLoadingVisits = true;
@@ -596,6 +597,19 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
         }).timeout(const Duration(seconds: 5));
       } catch (_) {}
 
+      if (updatedAppointment != null) {
+        try {
+          final apptPayload = {
+            'visitId': updatedVisit.id,
+            'patientId': updatedAppointment.patientId > 0 ? updatedAppointment.patientId : _currentPatient.id,
+            'doctorId': updatedAppointment.doctorId > 0 ? updatedAppointment.doctorId : _doctorId,
+            'appointmentDate': updatedAppointment.appointmentDate,
+            'procedureText': updatedAppointment.procedureText,
+          };
+          await AppointmentService.createAppointment(apptPayload).timeout(const Duration(seconds: 5));
+        } catch (_) {}
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -610,6 +624,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
 
       _fetchVisits();
       _fetchPayments();
+      _fetchAppointments();
     }
   }
 

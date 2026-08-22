@@ -127,50 +127,90 @@ class PdfGenerator {
     pw.Font bold,
     pw.Font regular,
   ) {
-    final clinicName = report.clinic?.companyName ?? 'Dental Clinic';
-    final clinicAddress = report.clinic?.companyAddress ?? '';
+    final clinicName = (report.clinic?.companyName.trim().isNotEmpty == true)
+        ? report.clinic!.companyName.trim()
+        : 'Dental Clinic';
+    final clinicAddress = report.clinic?.companyAddress.trim() ?? '';
 
-    return pw.Container(
-      width: double.infinity,
-      padding: const pw.EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: const pw.BoxDecoration(
-        color: _navy,
-        borderRadius: pw.BorderRadius.all(pw.Radius.circular(6)),
-      ),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Expanded(
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  clinicName.toUpperCase(),
-                  style: pw.TextStyle(font: bold, fontSize: 18, color: PdfColors.white, letterSpacing: 0.5),
-                ),
-                if (clinicAddress.isNotEmpty) ...[
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    clinicAddress,
-                    style: pw.TextStyle(font: regular, fontSize: 9, color: PdfColor.fromInt(0xCCFFFFFF)),
-                  ),
-                ],
-              ],
-            ),
+    final regList = <String>[];
+    if (report.clinic?.clinicRegNo.trim().isNotEmpty == true) {
+      regList.add('Clinic Reg: ${report.clinic!.clinicRegNo.trim()}');
+    }
+    if (report.clinic?.doctorRegCert.trim().isNotEmpty == true) {
+      regList.add('Doctor Reg: ${report.clinic!.doctorRegCert.trim()}');
+    }
+    if (report.clinic?.tradeLicense.trim().isNotEmpty == true) {
+      regList.add('Trade Lic: ${report.clinic!.tradeLicense.trim()}');
+    }
+    if (report.clinic?.pollutionControlCert.trim().isNotEmpty == true) {
+      regList.add('Pollution Cert: ${report.clinic!.pollutionControlCert.trim()}');
+    }
+    if (report.clinic?.municipalityNoc.trim().isNotEmpty == true) {
+      regList.add('NOC: ${report.clinic!.municipalityNoc.trim()}');
+    }
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          decoration: const pw.BoxDecoration(
+            color: _navy,
+            borderRadius: pw.BorderRadius.all(pw.Radius.circular(6)),
           ),
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.end,
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              if (doctorPhone.isNotEmpty)
-                pw.Text(doctorPhone, style: pw.TextStyle(font: regular, fontSize: 9, color: PdfColors.white)),
-              if (doctorEmail.isNotEmpty) ...[
-                pw.SizedBox(height: 3),
-                pw.Text(doctorEmail, style: pw.TextStyle(font: regular, fontSize: 9, color: PdfColors.white)),
-              ],
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      clinicName.toUpperCase(),
+                      style: pw.TextStyle(font: bold, fontSize: 16, color: PdfColors.white, letterSpacing: 0.5),
+                    ),
+                    if (clinicAddress.isNotEmpty) ...[
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        clinicAddress,
+                        style: pw.TextStyle(font: regular, fontSize: 9, color: PdfColor.fromInt(0xCCFFFFFF)),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  if (doctorPhone.isNotEmpty)
+                    pw.Text('Ph: $doctorPhone', style: pw.TextStyle(font: regular, fontSize: 9, color: PdfColors.white)),
+                  if (doctorEmail.isNotEmpty) ...[
+                    pw.SizedBox(height: 3),
+                    pw.Text('Email: $doctorEmail', style: pw.TextStyle(font: regular, fontSize: 9, color: PdfColors.white)),
+                  ],
+                ],
+              ),
             ],
           ),
+        ),
+        if (regList.isNotEmpty) ...[
+          pw.SizedBox(height: 4),
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: pw.BoxDecoration(
+              color: _bgLight,
+              border: pw.Border.all(color: _borderLight, width: 0.6),
+              borderRadius: pw.BorderRadius.circular(4),
+            ),
+            child: pw.Text(
+              regList.join('   •   '),
+              style: pw.TextStyle(font: regular, fontSize: 8, color: _textMuted),
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
 
@@ -226,6 +266,10 @@ class PdfGenerator {
                   _infoRow('Visit No', report.visit.visitNo.isNotEmpty ? report.visit.visitNo : 'N/A', bold, regular),
                   _infoRow('Visit Date', report.visit.visitDate.isNotEmpty ? report.visit.visitDate : 'N/A', bold, regular),
                   _infoRow('Invoice No', report.payment?.invoiceNo ?? 'N/A', bold, regular),
+                  if (report.clinic?.clinicRegNo.trim().isNotEmpty == true)
+                    _infoRow('Clinic Reg', report.clinic!.clinicRegNo.trim(), bold, regular),
+                  if (report.clinic?.doctorRegCert.trim().isNotEmpty == true)
+                    _infoRow('Doctor Reg', report.clinic!.doctorRegCert.trim(), bold, regular),
                 ],
               ),
             ),

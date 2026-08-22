@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 /// Centralized service to handle authentication API calls with the backend.
 class AuthService {
   // Shared base API endpoint URL
-  static const String baseUrl = 'https://tworingz.com/doctor_patient/api';
+  static const String baseUrl = 'https://jayadurgadentalhomeo.com/api/api';
 
   /// Register a new Doctor user.
   /// POST /api/auth/register.php
