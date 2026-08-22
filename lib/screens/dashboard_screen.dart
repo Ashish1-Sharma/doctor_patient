@@ -19,6 +19,7 @@ import 'appointments_screen.dart';
 import 'payments_screen.dart';
 import '../services/appointment_service.dart';
 import '../services/payment_service.dart';
+import '../services/dashboard_service.dart';
 
 /// The main DashboardScreen. Serves as the page container and coordinator of state.
 class DashboardScreen extends StatefulWidget {
@@ -29,11 +30,10 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // Local state lists for patients, visits, and payments
+  // Local state list for patients (also handed to the patient registry screen)
   late List<PatientModel> _patients;
-  late List<VisitModel> _visits;
-  late List<PaymentModel> _payments;
 
+  int _patientsTotal = 0;
   double _totalEarnings = 0.0;
   int _pendingPaymentsCount = 0;
   int _appointmentsTodayCount = 0;
@@ -51,10 +51,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _patients = [];
-    _visits = [];
-    _payments = [];
 
-    _calculateStats();
     _loadDoctorProfileAndFetchPatients();
   }
 
@@ -86,106 +83,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (_) {}
     
-    // Fetch patients from API
+    // Fetch patients from API (full list is still needed by the registry screen)
     await _fetchPatientsFromApi();
 
-    // Fetch visits and payments dynamically
-    await _fetchVisitsAndPaymentsFromApi();
+    // Fetch every dashboard tile stat in one aggregated call
+    await _fetchDashboardSummary();
+  }
 
-    // Fetch appointment stats from API
+  /// Loads all dashboard tile stats from the aggregate endpoint.
+  ///
+  /// Replaces the previous approach of downloading every visit (one request per
+  /// patient) and every payment row just to reduce them to a handful of numbers
+  /// on the client. On failure the existing values are left untouched.
+  Future<void> _fetchDashboardSummary() async {
+    if (_parentId == null) return;
     try {
-      final response = await AppointmentService.getAppointmentStats(_parentId!).timeout(const Duration(seconds: 5));
+      final response = await DashboardService.getSummary(_parentId!)
+          .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
         if (responseData['statusCode'] == 200 && responseData['body'] != null) {
           final body = responseData['body'];
+          int asInt(dynamic v) => v is int ? v : (int.tryParse(v.toString()) ?? 0);
+          double asDouble(dynamic v) => v is num ? v.toDouble() : (double.tryParse(v.toString()) ?? 0.0);
+          if (!mounted) return;
           setState(() {
-            _appointmentsTodayCount = body['appointments_today'] is int ? body['appointments_today'] : (int.tryParse(body['appointments_today'].toString()) ?? 0);
-            _appointmentsUpcomingCount = body['appointments_upcoming_total'] is int ? body['appointments_upcoming_total'] : (int.tryParse(body['appointments_upcoming_total'].toString()) ?? 0);
+            _patientsTotal = asInt(body['patients_total']);
+            _appointmentsTodayCount = asInt(body['appointments_today']);
+            _appointmentsUpcomingCount = asInt(body['appointments_upcoming_total']);
+            _totalEarnings = asDouble(body['total_earnings']);
+            _pendingPaymentsCount = asInt(body['pending_payments_count']);
           });
         }
       }
-    } catch (_) {
-      try {
-        final response = await AppointmentService.getAppointments(_parentId!).timeout(const Duration(seconds: 5));
-        if (response.statusCode == 200) {
-          final Map<String, dynamic> responseData = jsonDecode(response.body);
-          if (responseData['statusCode'] == 200 && responseData['body'] is List) {
-            final list = responseData['body'] as List;
-            final appts = list.map((json) => AppointmentModel.fromJson(json)).toList();
-            final now = DateTime.now();
-            final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-            int todayCount = 0;
-            int upcomingCount = 0;
-            for (var a in appts) {
-              if (a.status.toLowerCase() == 'cancelled') continue;
-              final aDate = a.appointmentDate.length >= 10 ? a.appointmentDate.substring(0, 10) : a.appointmentDate;
-              if (aDate == todayStr) todayCount++;
-              if (aDate.compareTo(todayStr) >= 0) upcomingCount++;
-            }
-            setState(() {
-              _appointmentsTodayCount = todayCount;
-              _appointmentsUpcomingCount = upcomingCount;
-            });
-          }
-        }
-      } catch (_) {}
-    }
-  }
-
-
-
-  Future<void> _fetchVisitsAndPaymentsFromApi() async {
-    List<VisitModel> allVisits = [];
-    List<PaymentModel> allPayments = [];
-
-    // Fetch API visits for all patients
-    List<VisitModel> apiVisits = [];
-    try {
-      final futures = _patients.map((patient) async {
-        try {
-          final response = await VisitService.getVisits(_parentId!, patient.id)
-              .timeout(const Duration(seconds: 3));
-          if (response.statusCode == 200) {
-            final Map<String, dynamic> responseData = jsonDecode(response.body);
-            if (responseData['statusCode'] == 200 && responseData['body'] is List) {
-              final list = responseData['body'] as List;
-              return list.map((json) => VisitModel.fromJson(json)).toList();
-            }
-          }
-        } catch (_) {}
-        return <VisitModel>[];
-      });
-
-      final results = await Future.wait(futures);
-      for (final list in results) {
-        apiVisits.addAll(list);
-      }
     } catch (_) {}
-
-    allVisits = apiVisits;
-    if (allVisits.isNotEmpty) {
-      allVisits.sort((a, b) => b.visitDate.compareTo(a.visitDate));
-    }
-
-    // Fetch Payments from API
-    try {
-      final response = await PaymentService.getPayments(_parentId!)
-          .timeout(const Duration(seconds: 5));
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = jsonDecode(response.body);
-        if (responseData['statusCode'] == 200 && responseData['body'] is List) {
-          final list = responseData['body'] as List;
-          allPayments = list.map((json) => PaymentModel.fromJson(json)).toList();
-        }
-      }
-    } catch (_) {}
-
-    setState(() {
-      _visits = allVisits;
-      _payments = allPayments;
-    });
-    _calculateStats();
   }
 
   Future<void> _fetchPatientsFromApi() async {
@@ -199,33 +130,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final fetched = list.map((json) => PatientModel.fromJson(json)).toList();
           setState(() {
             _patients = fetched;
+            if (_patientsTotal == 0) _patientsTotal = fetched.length;
           });
         }
       }
     } catch (_) {
       // Fallback: keep existing list
     }
-  }
-
-  void _calculateStats() {
-    double earnings = 0.0;
-    int pendingCount = 0;
-    
-    for (final p in _payments) {
-      if (p.paymentStatus.toLowerCase() == 'paid') {
-        earnings += p.totalAmount;
-      } else if (p.paymentStatus.toLowerCase() == 'partial') {
-        earnings += p.paidAmount;
-        pendingCount++;
-      } else if (p.paymentStatus.toLowerCase() == 'unpaid' || p.paymentStatus.toLowerCase() == 'pending') {
-        pendingCount++;
-      }
-    }
-
-    setState(() {
-      _totalEarnings = earnings;
-      _pendingPaymentsCount = pendingCount;
-    });
   }
 
   Future<void> _showAddTreatmentDialog() async {
@@ -247,9 +158,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final PaymentModel payment = result['payment'] as PaymentModel;
 
       setState(() {
-        _visits.insert(0, visit);
-        _payments.insert(0, payment);
-
         // Update patient's visit count and last visit date
         final pIndex = _patients.indexWhere((p) => p.id == visit.patientId);
         if (pIndex != -1) {
@@ -288,7 +196,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final AppointmentModel? appointment = result['appointment'] as AppointmentModel?;
       _asyncCreateVisitAndPayment(visit, payment, appointment);
 
-      _calculateStats();
+      _fetchDashboardSummary();
     }
   }
 
@@ -402,7 +310,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           );
         }
-        _fetchVisitsAndPaymentsFromApi(); // reload lists to get server synced IDs
+        _fetchDashboardSummary(); // reload aggregated stats now that the server has synced
       } else {
         print('DEBUG [DashboardScreen]: Visit API returned non-success structure: statusCode=${responseData['statusCode']}, message=${responseData['message']}');
         throw Exception('Server returned non-success response: ${responseData['message']}');
@@ -540,7 +448,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             Expanded(
                               child: StatCard(
                                 title: 'Patient Details',
-                                primaryValue: '${_patients.length}',
+                                primaryValue: '$_patientsTotal',
                                 secondaryText: 'Tap to view registry search',
                                 icon: Icons.people_alt_outlined,
                                 gradient: AppTheme.patientCardGradient,
@@ -600,7 +508,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         children: [
                           StatCard(
                             title: 'Patient Details',
-                            primaryValue: '${_patients.length}',
+                            primaryValue: '$_patientsTotal',
                             secondaryText: 'Tap to view registry search',
                             icon: Icons.people_alt_outlined,
                             gradient: AppTheme.patientCardGradient,

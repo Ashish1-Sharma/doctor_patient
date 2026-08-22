@@ -99,6 +99,48 @@ class Payment
     }
 
     /**
+     * Get Dashboard Payment Summary
+     *
+     * Single-pass aggregate replacing the client-side loop that used to run over
+     * the full getListByParentId() result. The CASE arms intentionally reproduce
+     * that loop exactly, including 'partial' counting toward both earnings
+     * (paid_amount only) and the pending-bills count.
+     */
+    public function getSummaryByParentId($parentId)
+    {
+        try {
+            $query = "SELECT
+                        COALESCE(SUM(
+                          CASE
+                            WHEN LOWER(payment_status) = 'paid' THEN total_amount
+                            WHEN LOWER(payment_status) = 'partial' THEN paid_amount
+                            ELSE 0
+                          END
+                        ), 0) AS total_earnings,
+                        SUM(
+                          CASE
+                            WHEN LOWER(payment_status) IN ('partial', 'unpaid', 'pending') THEN 1
+                            ELSE 0
+                          END
+                        ) AS pending_count
+                      FROM {$this->table}
+                      WHERE parentId = :parentId";
+
+            $stmt = $this->connection->prepare($query);
+            $stmt->bindValue(":parentId", $parentId, PDO::PARAM_INT);
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return [
+                'total_earnings' => (float)($row['total_earnings'] ?? 0),
+                'pending_payments_count' => (int)($row['pending_count'] ?? 0),
+            ];
+        } catch (PDOException $e) {
+            throw new Exception("Error fetching payment summary: " . $e->getMessage());
+        }
+    }
+
+    /**
      * Get Payment by Visit ID
      */
     public function getByVisitId($visitId)

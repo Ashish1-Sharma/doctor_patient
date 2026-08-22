@@ -191,6 +191,26 @@ class Patient
     }
 
     /**
+     * Count Active Patients
+     *
+     * Mirrors the WHERE clause of getPatients() so the dashboard count always
+     * matches the length of the list that screen would have fetched.
+     */
+    public function countPatients($parentId)
+    {
+        $query = "SELECT COUNT(*) AS total
+                  FROM {$this->table}
+                  WHERE parentId = ?
+                  AND status = 1";
+
+        $stmt = $this->connection->prepare($query);
+        $stmt->execute([$parentId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return (int)($row['total'] ?? 0);
+    }
+
+    /**
      * Get All Patients
      */
     public function getPatients($parentId)
