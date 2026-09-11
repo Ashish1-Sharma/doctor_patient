@@ -73,6 +73,11 @@ class _NewTreatmentScreenState extends State<NewTreatmentScreen> {
     );
   }
 
+  /// Owned here so the Next button can validate the payment step's fields
+  /// before advancing; the step itself only validated on field change, which
+  /// left its errors visible but unenforced.
+  final GlobalKey<FormState> _paymentFormKey = GlobalKey<FormState>();
+
   bool _validateStep(int step, VisitProvider provider) {
     switch (step) {
       case 0:
@@ -88,6 +93,12 @@ class _NewTreatmentScreenState extends State<NewTreatmentScreen> {
         }
         break;
       case 4:
+        // Re-runs the field validators, which both blocks the transition and
+        // re-displays the error text if the user never touched a field.
+        if (_paymentFormKey.currentState?.validate() == false) {
+          _showValidationError('Please correct the highlighted payment fields.');
+          return false;
+        }
         if (provider.payment.totalAmount < 0) {
           _showValidationError('Total Amount cannot be negative.');
           return false;
@@ -201,13 +212,13 @@ class _NewTreatmentScreenState extends State<NewTreatmentScreen> {
                       _currentStep = idx;
                     });
                   },
-                  children: const [
-                    PatientSelectionStep(),
-                    FindingsStep(),
-                    LabStep(),
-                    TreatmentStep(),
-                    PaymentStep(),
-                    InvoiceStep(),
+                  children: [
+                    const PatientSelectionStep(),
+                    const FindingsStep(),
+                    const LabStep(),
+                    const TreatmentStep(),
+                    PaymentStep(formKey: _paymentFormKey),
+                    const InvoiceStep(),
                   ],
                 ),
               ),

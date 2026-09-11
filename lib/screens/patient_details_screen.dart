@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
 
 import '../models/patient_model.dart';
 import '../models/visit_model.dart';
@@ -509,13 +510,19 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
         if (responseData['statusCode'] == 200 && responseData['body'] is List) {
           final list = responseData['body'] as List;
           final fetchedPayments = list.map((json) => PaymentModel.fromJson(json)).toList();
-          linkedPayment = fetchedPayments.firstWhere((p) => p.visitId == visit.id);
+          // firstWhere without orElse throws when the visit has no invoice yet,
+          // and the throw used to be swallowed by the catch below.
+          final matches = fetchedPayments.where((p) => p.visitId == visit.id);
+          linkedPayment = matches.isEmpty ? null : matches.first;
         }
       }
     } catch (_) {}
 
+    // No invoice exists for this visit yet. id 0 marks it as unsaved so the save
+    // path below creates a row instead of updating a fabricated id that matches
+    // nothing in the database.
     linkedPayment ??= PaymentModel(
-      id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      id: 0,
       parentId: _parentId,
       visitId: visit.id,
       patientId: visit.patientId,
@@ -587,14 +594,50 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
         }
       } catch (_) {}
 
+      // Persist the invoice. The figures the user can actually change while
+      // editing a visit are subtotal / discount / total, so all of them are sent
+      // here, not just the settled amounts.
+      bool paymentSuccess = false;
       try {
-        await PaymentService.updatePaymentDetails({
-          'id': updatedPayment.id,
-          'paidAmount': updatedPayment.paidAmount,
-          'pendingAmount': updatedPayment.pendingAmount,
-          'paymentStatus': updatedPayment.paymentStatus,
-          'remarks': updatedPayment.remarks,
-        }).timeout(const Duration(seconds: 5));
+        final http.Response paymentResponse;
+        if (updatedPayment.id > 0) {
+          paymentResponse = await PaymentService.updatePaymentDetails({
+            'id': updatedPayment.id,
+            'subtotal': updatedPayment.subtotal,
+            'discount': updatedPayment.discount,
+            'totalAmount': updatedPayment.totalAmount,
+            'paidAmount': updatedPayment.paidAmount,
+            'pendingAmount': updatedPayment.pendingAmount,
+            'paymentMethod': updatedPayment.paymentMethod,
+            'paymentStatus': updatedPayment.paymentStatus,
+            'paymentDate': updatedPayment.paymentDate,
+            'remarks': updatedPayment.remarks,
+          }).timeout(const Duration(seconds: 5));
+        } else {
+          // The visit had no invoice row; create one now.
+          paymentResponse = await PaymentService.createPayment({
+            'parentId': _parentId,
+            'visitId': updatedVisit.id,
+            'patientId': updatedVisit.patientId > 0 ? updatedVisit.patientId : _currentPatient.id,
+            'invoiceNo': 'INV-${updatedVisit.id}',
+            'subtotal': updatedPayment.subtotal,
+            'discount': updatedPayment.discount,
+            'totalAmount': updatedPayment.totalAmount,
+            'paidAmount': updatedPayment.paidAmount,
+            'pendingAmount': updatedPayment.pendingAmount,
+            'paymentMethod': updatedPayment.paymentMethod,
+            'paymentStatus': updatedPayment.paymentStatus,
+            'paymentDate': updatedPayment.paymentDate,
+            'remarks': updatedPayment.remarks,
+            'createdBy': _doctorId,
+          }).timeout(const Duration(seconds: 5));
+        }
+
+        if (paymentResponse.statusCode == 200 || paymentResponse.statusCode == 201) {
+          final Map<String, dynamic> payData = jsonDecode(paymentResponse.body);
+          final code = payData['statusCode'];
+          paymentSuccess = code == 200 || code == 201;
+        }
       } catch (_) {}
 
       if (updatedAppointment != null) {
@@ -613,10 +656,14 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(visitSuccess
+            content: Text(visitSuccess && paymentSuccess
                 ? 'Visit details saved and synchronized.'
-                : 'Failed to synchronize details with database.'),
-            backgroundColor: visitSuccess ? AppTheme.emeraldSuccess : AppTheme.redDestructive,
+                : !visitSuccess
+                    ? 'Failed to synchronize details with database.'
+                    : 'Visit saved, but the payment could not be updated.'),
+            backgroundColor: visitSuccess && paymentSuccess
+                ? AppTheme.emeraldSuccess
+                : AppTheme.redDestructive,
             behavior: SnackBarBehavior.floating,
           ),
         );

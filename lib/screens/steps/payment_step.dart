@@ -5,14 +5,19 @@ import '../../theme/app_theme.dart';
 
 /// STEP 5: Payment details step inside the New Treatment workflow.
 class PaymentStep extends StatefulWidget {
-  const PaymentStep({super.key});
+  /// Optional form key owned by the parent workflow, so the Next button can
+  /// validate this step before advancing. Falls back to a private key when the
+  /// step is used standalone.
+  final GlobalKey<FormState>? formKey;
+
+  const PaymentStep({super.key, this.formKey});
 
   @override
   State<PaymentStep> createState() => _PaymentStepState();
 }
 
 class _PaymentStepState extends State<PaymentStep> {
-  final _formKey = GlobalKey<FormState>();
+  late final GlobalKey<FormState> _formKey = widget.formKey ?? GlobalKey<FormState>();
   final _subtotalController = TextEditingController();
   final _discountController = TextEditingController();
   final _paidController = TextEditingController();
@@ -48,7 +53,7 @@ class _PaymentStepState extends State<PaymentStep> {
   }
 
   void _syncToProvider() {
-    if (_formKey.currentState!.validate()) {
+    if (_formKey.currentState?.validate() ?? false) {
       final provider = Provider.of<VisitProvider>(context, listen: false);
       provider.updatePayment(
         subtotal: _subtotal,
